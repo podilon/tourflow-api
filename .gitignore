@@ -1,0 +1,7 @@
+# Segredos e configuração local (.env.example permanece versionado)
+.env
+.env.*
+!.env.example
+
+# Preferências pessoais do Claude Code
+.claude/settings.local.json

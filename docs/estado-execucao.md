@@ -26,8 +26,55 @@
 | Bloco 1 — F1-T4, F1-T5, F2-T1, F2-T2 | `61c6c65`; merge `90e238e` em `develop` (PR #8) | Concluído e mesclado |
 | Bloco 2 — F2-T3, F2-T4 | `d075476`; merge `8c18f24` em `develop` (PR #9) | Concluído e mesclado; CI `43037580198` verde (cobertura e integração) |
 | Bloco 3 — F3-T1 a F3-T4 | `c5a83d0`; merge `b76cd30` em `develop` (PR #10) | Concluído e mesclado; CI `43047452444` (PR) e `43048277947` (`develop`) verdes |
+| Bloco 4 — F4-T1 a F4-T5 | `2820b89`, `e66f47c`; merge `cfb2d9d` em `develop` (PR #11) | Concluído e mesclado; CI `43055015372` e `43057266165` (PR) e `43057766477` (`develop`) verdes |
+| F5-T1/F5-T2 — Promoção para `main` | PR #12 `develop` → `main` no head `cfb2d9d`; merge `f0237c8` em `main` | Concluída; CI de push `43059539492` verde no mesmo SHA |
 
-## Checkpoint atual — Bloco 4: F4-T1 a F4-T4 (2026-11-11)
+## Checkpoint atual — F5: promoção validada e revisão documental (2026-11-11)
+
+### Versão validada em `main`
+
+| Item | Valor confirmado no GitHub |
+| --- | --- |
+| PR | [#12](https://github.com/podilon/tourflow-api/pull/12) `chore: promote develop to main for delivery (F5)`, `develop` → `main`, `MERGED` em 2026-11-11T16:33:42Z |
+| Head do PR | `cfb2d9d04602c3feb997f86ebd4481f94ca2d1cf` (SHA aprovado para a promoção) |
+| Merge em `main` | `f0237c8bb653cc1262bbd97b86d4f10d981b42d7`, igual a `origin/main` |
+| CI de push | [run 43059539492](https://github.com/podilon/tourflow-api/actions/runs/43059539492), workflow `CI`, evento `push`, branch `main`, `completed`/`success`, `headSha` `f0237c8bb653cc1262bbd97b86d4f10d981b42d7` |
+| Job | `Foundation (Compose lint, typecheck, test, build)` `success`; no log: 7 arquivos e 122 testes unitários aprovados, `All files` 100%, `[db-test] Applied migration 0001_initial_schema`, 10 testes de integração aprovados |
+| CI do PR #12 | [run 43058912470](https://github.com/podilon/tourflow-api/actions/runs/43058912470), `pull_request`, `success`, head `cfb2d9d` |
+
+Com isso, a F5-T2 está concluída para a versão `f0237c8`. A F5-T3 (Moodle) continua pendente.
+
+### Revisão documental (preparada localmente, não publicada)
+
+- **Base:** `develop` = `origin/develop` = `cfb2d9d04602c3feb997f86ebd4481f94ca2d1cf`. `main` em `f0237c8` contém `cfb2d9d`; a revisão não altera código.
+- **Arquivos do próximo PR:** `README.md`, `ROADMAP.md`, `CONTRIBUTORS.md`, `docs/adr/0001-arquitetura.md`, `docs/desempenho.md`, `docs/ia.md` e `docs/estado-execucao.md`.
+- **Fora do diff de entrega:** os ajustes locais de `.claude/settings.json`, `CLAUDE.md` e `docs/governanca.md` (§21, promoção F5), preservados sem edição. `docs/openapi.yaml`, `src/`, `tests/`, dependências, CI, dados, volumes, `performance/results/` e o clone `.tourflow-f4-clean` não foram alterados.
+- **Conteúdo:** README como página de entrada da avaliação, em oito seções (visão geral e domínio; arquitetura e stack com diagrama Mermaid; pré-requisitos, configuração e guia rápido; demonstração E2E e contrato; testes e CI; saúde, observabilidade e desempenho; decisões, governança e contribuição; roadmap, rubrica e entrega), com badge do CI de `main`, badge estático de cobertura identificado e matriz da rubrica. ADR v1.3 (status "Aceito" vinculado ao commit `d9b59b3` do G0 e evidências no código); `docs/desempenho.md` com método, resultado oficial, ensaio em clone e limitações em seções próprias; `docs/ia.md` por fase; `CONTRIBUTORS.md` padronizado; ROADMAP v1.2 com status real.
+
+#### Verificações desta revisão
+
+| Verificação | Tipo | Resultado |
+| --- | --- | --- |
+| `gh pr view 12` e `gh run view 43059539492` | Executada | Valores da tabela acima; `headSha` igual ao merge |
+| `gh run view 43059539492 --log` | Executada | 122 unitários, 100% de cobertura, 10 de integração |
+| Sondas HTTP permitidas no container `api` do projeto `tourflow` (somente leitura) | Executada | `/health` 200 `{"status":"ok","database":"up"}`; `/experiences` 200 com 2 itens; `/departures` 200 com 4 itens (`…6b01` com 10 vagas); consulta da reserva `9c08f28d-…0bb0` 200 sem nome nem e-mail; `POST` com 11 participantes → `409 NO_AVAILABILITY`, `availableSeats` 10 antes e depois. Nenhuma reserva criada |
+| Links relativos e âncoras dos sete Markdown revisados | Executada (script Node em container `--network none`, montagem somente leitura) | 0 problemas |
+| `git diff --check` | Executada | exit 0 |
+| Rulesets e configuração de merge (`gh api …/rulesets`, `…/rulesets/<id>`, `repos/podilon/tourflow-api`) | Executada (somente leitura) | `Protect permanent branches` (`deletion`, `non_fast_forward`) e `Require TourFlow CI before merge` (`pull_request` com 0 aprovações, check `Foundation`) ativos em `main` e `develop`, sem bypass; `delete_branch_on_merge` e `allow_auto_merge` ativos. Sem proteção clássica de branch |
+| Versões da stack | Executada | Conferidas no `Dockerfile`, no `docker-compose.yml` e no `package-lock.json` |
+| Diagrama Mermaid do README | Parcial | Sintaxe revisada manualmente (`flowchart LR`, rótulos entre aspas). A renderização no GitHub só pode ser conferida depois do push |
+| Exemplos `curl` do README pelo host (Git Bash) | **Não executada** | A regra deny `Bash(curl *)` bloqueia o agente. Os payloads e respostas são os mesmos das sondas no container e do E2E do Bloco 1 |
+| Lint, typecheck, testes, build e k6 | Não reexecutados | Sem mudança de código; vale a evidência do run 43059539492 e do Bloco 4 |
+| Validação do OpenAPI | Não reexecutada | `docs/openapi.yaml` não foi alterado; validado por `tests/unit/openapi.test.ts` no run 43059539492 |
+
+#### Pendências desta revisão
+
+1. Autorização para publicar a revisão por PR para `develop` e promover o novo SHA para `main`. A aprovação anterior estava vinculada a `cfb2d9d`.
+2. Registrar aqui o SHA da revisão em `main`: `<pendente>`.
+3. Registrar aqui o CI de push verde nesse SHA: `<pendente>`.
+4. F5-T3: submissão no Moodle e registro da confirmação de envio: `<pendente>`.
+
+## Checkpoint anterior — Bloco 4: F4-T1 a F4-T4 (2026-11-11)
 
 - Tarefas: smoke k6 (F4-T1), resultado real em `docs/desempenho.md` (F4-T2), revisão de segurança (F4-T3) e documentação de entrega (F4-T4), num único PR para `develop` (`docs/governanca.md` §20). O ensaio em clone limpo (F4-T5) fica fora do loop e é executado pelo Claude Code depois do push.
 - Execução: Ralph Loop, iteração 1 de 3. Situação: **validado localmente**. Commit, push, PR, F4-T5 e auto-merge ficam fora do loop. Commit `2820b89` publicado no PR #11; F4-T5 executada pelo Claude Code em 2026-11-11 (ver abaixo).
@@ -489,10 +536,11 @@ F1-T1 aprovada tecnicamente com ressalvas, depois da rodada de correção 1. Evi
 
 ## Próxima ação
 
-1. Fora do loop: commit `feat: add k6 smoke and delivery documentation (F4-T1 to F4-T4)`, push de `feat/f4-k6-homologation` e um único PR para `develop`, ainda sem auto-merge.
-2. O Claude Code executa o ensaio em clone limpo e coleta a evidência conforme a seção F4-T5.
-3. Registro da F4-T5 em `docs/estado-execucao.md` e `docs/ia.md` (`docs: record clean clone rehearsal (F4-T5)`), push, conferência do destino, do SHA final e do check obrigatório aprovado nesse SHA; então auto-merge com `--match-head-commit`, sem polling.
-4. A promoção `develop` → `main` e a entrega no Moodle ficam para a F5 (`docs/governanca.md` §20).
+1. Com autorização: branch documental a partir de `develop` (`cfb2d9d`), stage apenas dos sete arquivos listados no checkpoint da F5, commit, push e PR para `develop`; merge após o check obrigatório `Foundation` verde no SHA do PR.
+2. Com nova autorização vinculada ao SHA documental: PR de `develop` para `main`, merge com `--match-head-commit` e registro do CI de push verde no SHA resultante.
+3. F5-T3: submissão no Moodle até 13/11/2026 e registro da confirmação de envio. Só então a F5-T3 é marcada como concluída.
+
+Próximas ações anteriores, já cumpridas: commit e PR #11 do Bloco 4, ensaio F4-T5, registro da F4-T5 e merge em `develop` (`cfb2d9d`); promoção para `main` pelo PR #12 (`f0237c8`).
 
 ## Governança
 

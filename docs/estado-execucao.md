@@ -25,11 +25,120 @@
 | F1-T3 — Consultas de catálogo | `c53363f`; merge `59b1517` em `develop` (PR #7) | Concluída e mesclada |
 | Bloco 1 — F1-T4, F1-T5, F2-T1, F2-T2 | `61c6c65`; merge `90e238e` em `develop` (PR #8) | Concluído e mesclado |
 | Bloco 2 — F2-T3, F2-T4 | `d075476`; merge `8c18f24` em `develop` (PR #9) | Concluído e mesclado; CI `43037580198` verde (cobertura e integração) |
+| Bloco 3 — F3-T1 a F3-T4 | `c5a83d0`; merge `b76cd30` em `develop` (PR #10) | Concluído e mesclado; CI `43047452444` (PR) e `43048277947` (`develop`) verdes |
 
-## Checkpoint atual — Bloco 3: F3-T1 a F3-T4 (2026-11-11)
+## Checkpoint atual — Bloco 4: F4-T1 a F4-T4 (2026-11-11)
+
+- Tarefas: smoke k6 (F4-T1), resultado real em `docs/desempenho.md` (F4-T2), revisão de segurança (F4-T3) e documentação de entrega (F4-T4), num único PR para `develop` (`docs/governanca.md` §20). O ensaio em clone limpo (F4-T5) fica fora do loop e é executado pelo Claude Code depois do push.
+- Execução: Ralph Loop, iteração 1 de 3. Situação: **validado localmente**. Commit, push, PR, F4-T5 e auto-merge ficam fora do loop. Commit `2820b89` publicado no PR #11; F4-T5 executada pelo Claude Code em 2026-11-11 (ver abaixo).
+
+### Início
+
+- `origin` → `https://github.com/podilon/tourflow-api.git`. `develop` local e `origin/develop` em `b76cd30225e5…`. Árvore com apenas as três mudanças de governança preparadas (`.claude/settings.json` +28, `CLAUDE.md` +7, `docs/governanca.md` +26), preservadas.
+- `git switch -c feat/f4-k6-homologation origin/develop` levou as três mudanças.
+
+### Imagem k6
+
+- `buildx imagetools inspect grafana/k6:1.0.0` → índice OCI com digest `sha256:f21270290d702cbf0a7d6ba5d7ed100b63bcb233b558b885ed787547b3488279` (64 dígitos hexadecimais conferidos), com manifestos linux/amd64 e linux/arm64.
+- O pull foi feito somente por `grafana/k6:1.0.0@sha256:f212…8279`. `RepoDigests` = `grafana/k6@sha256:f212…8279`; `version` → `k6 v1.0.0 (commit/41b4984b75-dirty, go1.24.2, linux/amd64)`. A mesma referência está fixada no serviço `k6`.
+
+### Implementação
+
+- `docker-compose.yml`: serviço `k6` (profile `perf`, `working_dir /scripts`, `./performance:/scripts:ro`, `./performance/results:/results`, `BASE_URL=http://api:3000`, sem porta). Parametrização com os padrões atuais preservados: `name: ${COMPOSE_PROJECT_NAME:-tourflow}`, `127.0.0.1:${TOURFLOW_API_PORT:-3000}:3000`, `tourflow-api`/`tourflow-dev:${TOURFLOW_IMAGE_TAG:-local}`, volumes `${TOURFLOW_PGDATA_VOLUME:-tourflow_pgdata}` e `${TOURFLOW_NODE_MODULES_VOLUME:-tourflow_dev_node_modules}`.
+- `performance/smoke.js`: 1 VU por 30 s em `GET /departures`, intervalo de 50 ms; thresholds separados `p(95)<500` e `slo_departures_ok rate>=0.99` (sucesso só com HTTP 200 e duração < 500 ms); `handleSummary` grava `performance/results/smoke-summary.json` e classifica o SLO (inconclusivo abaixo de 200 amostras).
+- `eslint.config.js`: globais do k6 (`__ENV`, `__VU`, `__ITER`) apenas em `performance/**/*.js`.
+- `.env.example`, `README.md` (estado, ambiente isolado, smoke k6, SLO medido, ressalvas de log, rastreabilidade com a rubrica), `docs/desempenho.md`, `CONTRIBUTORS.md` (Paulo Odilon Everton Rodrigues, @podilon) e `docs/ia.md`.
+- `ci.yml`, `src/`, `tests/`, `PRD.md`, `ROADMAP.md` e ADR não foram alterados. O check obrigatório `Foundation (Compose lint, typecheck, test, build)` foi preservado.
+
+### Verificações executadas
+
+| Verificação | Resultado |
+| --- | --- |
+| `--profile perf config --quiet` e `--profile test config --quiet` | exit 0 |
+| `--profile perf --profile test config --format json` | projeto `tourflow`; `api` só em `127.0.0.1:3000`; `db`, `db-test` e `k6` sem porta; imagens `tourflow-api:local`, Postgres e k6 por digest; volume `tourflow_pgdata`; `/scripts` somente leitura |
+| `run --rm --no-deps dev npm run lint` | exit 0, sem avisos (inclui `performance/smoke.js`) |
+| `run --rm --no-deps dev npm run typecheck` | exit 0 |
+| `run --rm --no-deps dev npm run test:coverage` | exit 0; 122 testes em 7 arquivos; 100% de linhas e de branches; limiares de 80% inalterados |
+| `--profile test up -d --wait db-test` + `test:integration` | exit 0; schema aplicado no `db-test`; 10 de 10 |
+| `run --rm --no-deps dev npm run build` | exit 0 |
+| `--profile test stop db-test` | `Stopped` |
+| `up --build -d --wait api` | `api` e `db` `Healthy` |
+| `GET /health` | `200 {"status":"ok","database":"up"}` |
+| Fingerprint do catálogo em `db/tourflow` antes e depois do smoke | idêntico: 2 experiências, 1 reserva, 4 saídas, `141eee827dea643c94bb01d4471801f9` |
+| **Smoke k6 oficial (única execução)** | **exit 0**; 572 requisições; p95 1,913 ms (`p(95)<500` OK); `slo_departures_ok` 100,00% (572/572, `rate>=0.99` OK); SLO **ATINGIDO** |
+| `logs --tail 50 api` | linhas JSON `route":"/departures","statusCode":200` (49 nas últimas 50) |
+
+### Revisão de segurança (F4-T3)
+
+| Item | Resultado |
+| --- | --- |
+| Segredos | busca por tokens, chaves privadas e URIs com credenciais: nenhuma ocorrência. Único arquivo `.env*` versionado: `.env.example`, só com placeholders. `.env` e `.env.*` ignorados (`git check-ignore`) |
+| Portas | `api` somente em `127.0.0.1` (porta parametrizável, padrão 3000); `db`, `db-test` e `k6` sem porta publicada |
+| Imagens | Node `24.22.2-alpine3.24@sha256:a34a…`, Postgres `17.11-alpine@sha256:3540…`, k6 `1.0.0@sha256:f212…`: todas com tag exata e digest |
+| Dependências | todas as versões de `package.json` são exatas; `npm audit --omit=dev` → 0 vulnerabilidades; `npm audit` → as mesmas 10 moderadas da cadeia de lint (GHSA-g3hv-75wg-m249; correção só por `--force`, com mudança incompatível) |
+| Permissões | `disableBypassPermissionsMode: disable`; regras `deny` e `ask` inalteradas |
+| CI | `runs-on: ubuntu-latest`, sem runner self-hosted; `ci.yml` inalterado |
+
+### Ressalvas técnicas abertas (verificadas no código)
+
+- `src/http/middlewares/error-handler.ts:30-31`: com `res.headersSent`, o erro segue para o handler padrão do Express, que imprime o stack no stderr fora de `NODE_ENV=test`. A resposta HTTP não expõe nada; o caso é raro e anterior ao Bloco 3. O comportamento do Express vem da documentação e não foi reproduzido.
+- `src/infra/db/pool.ts:29`: um cliente ocioso com erro gera uma linha de texto no stderr (sem detalhes), não JSON.
+- `src/http/middlewares/request-context.ts:31`: o log é escrito no `finish`; uma requisição abortada antes dele não gera linha.
+- `prom-client` 15.1.3 está marcado como deprecated no npm; a troca exige nova aprovação.
+- O commit `c5a83d0` não tem o trailer `Co-Authored-By`, porque a regra allow só cobre a mensagem exata. A autoria por IA está em `docs/ia.md`.
+
+### F4-T5 — ensaio em clone limpo pelo Claude Code
+
+Fora do Ralph Loop, clone a branch publicada do PR #11 em
+`.tourflow-f4-clean` e confirme o SHA
+`2820b89d03a1799fafdc46e1838a1c1391aa8142`. Use os comandos do clone na
+lista allow. Confira antes de subir serviços o projeto `tourflow_clean`,
+o bind `127.0.0.1:3100` para a porta interna `3000`, os volumes
+`tourflow_clean_pgdata` e `tourflow_clean_dev_node_modules`, as tags
+`:clean` e a ausência de portas publicadas nos bancos e no k6.
+
+Reproduza o fluxo do README no clone. Para o smoke, crie
+`performance/results/clone-rehearsal` no clone e use o comando k6
+autorizado com `RESULTS_DIR=../results/clone-rehearsal`. Confirme que
+o JSON do ensaio é novo e que o JSON oficial versionado permanece
+intacto. Registre SHA, configuração, HTTP, testes, p95, amostra, SLO e
+exits. Pare só os serviços do clone, preservando volumes.
+
+#### Resultado do ensaio (2026-11-11, Claude Code)
+
+- **Clone:** `git clone --branch feat/f4-k6-homologation --single-branch https://github.com/podilon/tourflow-api.git .tourflow-f4-clean` (exit 0). O destino não existia antes. `HEAD` do clone → `refs/heads/feat/f4-k6-homologation` = `2820b89d03a1799fafdc46e1838a1c1391aa8142`, igual ao `headRefOid` do PR #11 e ao `ls-remote`.
+- **`.env` do clone:** valores fictícios do `.env.example` mais `COMPOSE_PROJECT_NAME=tourflow_clean`, `TOURFLOW_API_PORT=3100`, `TOURFLOW_PGDATA_VOLUME=tourflow_clean_pgdata`, `TOURFLOW_NODE_MODULES_VOLUME=tourflow_clean_dev_node_modules` e `TOURFLOW_IMAGE_TAG=clean`. Como a regra `Read(./**/.env)` também bloqueia a escrita pela ferramenta Write, o arquivo foi preparado no scratchpad da sessão e copiado com `cp`, com confirmação do responsável (regra `ask`). A senha não foi impressa.
+- **Configuração efetiva** (`config --format json` com os profiles `dev`, `test` e `perf`, filtrado por `jq` para omitir o ambiente): projeto `tourflow_clean`; `api` `tourflow-api:clean` somente em `127.0.0.1:3100→3000`; `dev` `tourflow-dev:clean`; `db`, `db-test` e `k6` sem portas; volumes físicos `tourflow_clean_pgdata` e `tourflow_clean_dev_node_modules`; `db-test` em tmpfs; `/scripts` do k6 somente leitura; Postgres e k6 fixados por digest.
+
+| Etapa no clone (`-p tourflow_clean`) | Resultado |
+| --- | --- |
+| `up --build -d --wait api` | exit 0; `db` e `api` `Healthy`; `ps`: `127.0.0.1:3100->3000/tcp`, `db` só `5432/tcp` interno |
+| `run --rm --no-deps api node dist/infra/db/migrate.js` | exit 0; `Applied migration 0001_initial_schema` |
+| `run --rm --no-deps api node dist/infra/db/seed.js` | exit 0; 2 experiências e 4 saídas |
+| HTTP | `curl.exe` pelo host foi bloqueado pela regra `deny` `Bash(curl *)`, que prevalece sobre a entrada allow. Com a decisão do responsável, a verificação usou `exec -T api node -e fetch(...)` na porta interna e `port api 3000`. Resultados: `/health` **200** `{"status":"ok","database":"up"}`, `/departures` **200** com 4 itens (exit 0) e bind `127.0.0.1:3100` (exit 0). A requisição pelo bind do host não foi executada |
+| `--profile dev build dev` | exit 0 (`tourflow-dev:clean`) |
+| `npm run lint` | exit 0, sem avisos |
+| `npm run typecheck` | exit 0 |
+| `npm run test:coverage` | exit 0; 122 testes em 7 arquivos; 100% de statements, branches, funções e linhas |
+| `--profile test up -d --wait db-test` + `npm run test:integration` | exit 0; schema aplicado no `db-test` do clone; 10 de 10, incluindo concorrência |
+| `npm run build` | exit 0 |
+| `mkdir performance/results/clone-rehearsal` | diretório novo e vazio antes do smoke |
+| `--profile perf run --rm --no-deps k6 run -e RESULTS_DIR=../results/clone-rehearsal smoke.js` | **exit 0**; 571 requisições; p95 **2,063 ms** (`p(95)<500` OK); `slo_departures_ok` **100,00% (571/571)** (`rate>=0.99` OK); SLO **ATINGIDO** (mínimo de 200) |
+| JSON do ensaio | `performance/results/clone-rehearsal/smoke-summary.json` no clone, novo (`generatedAt` `2026-11-11T16:18:32.446Z`), 816 bytes |
+| JSON oficial | SHA-256 `2d54237b…a231e555` antes e depois do smoke, idêntico no clone e no repositório principal; `git status` sem alteração em `performance/` |
+| `--profile test stop api db db-test` | serviços do clone parados; `ps` vazio; volumes `tourflow_clean_*` preservados |
+
+- A evidência do clone é separada do resultado oficial (572 requisições, p95 1,913 ms, SLO 100%) e não o substitui.
+
+### Estado deixado
+
+- `api` e `db` do projeto `tourflow` em execução, sem alteração de dados; `db-test` parado; volumes preservados.
+- Projeto `tourflow_clean` parado, com volumes `tourflow_clean_pgdata` e `tourflow_clean_dev_node_modules`, imagens `:clean` e o diretório `.tourflow-f4-clean` (ignorado pelo Git e pelo contexto Docker) preservados.
+
+## Checkpoint anterior — Bloco 3: F3-T1 a F3-T4 (2026-11-11)
 
 - Tarefas: logs Pino (F3-T1), métrica e SLO documentado (F3-T2), OpenAPI 3.1 (F3-T3), ADR e README com tabela SOLID (F3-T4), num único PR (`docs/governanca.md` §19).
-- Execução: Ralph Loop, iteração 1 de 3. Situação: **validado localmente**. Sem commit; commit, push, PR e auto-merge ficam fora do loop. k6 não executado (Bloco 4).
+- Execução: Ralph Loop, iteração 1 de 3. Situação: **concluído e mesclado**. Commit `c5a83d0` feito pelo Claude Code com a mensagem autorizada, depois da revalidação em Docker (lint, typecheck, 122 unitários, 100% de linhas 32/32 e de branches 9/9, 10 testes de integração, build). Push, PR #10 e merge normal com `--match-head-commit`, sem `--auto`, após o CI `43047452444` verde. Merge `b76cd30`; CI de `develop` `43048277947` verde. Branch remota apagada pelo GitHub; branch local removida com `git branch -d` (`was c5a83d0`).
 
 ### Fechamento do PR #9 e branch
 
@@ -380,7 +489,10 @@ F1-T1 aprovada tecnicamente com ressalvas, depois da rodada de correção 1. Evi
 
 ## Próxima ação
 
-Publicação de `feat/f3-observability-openapi` por PR para `develop` com auto-merge no HEAD atual (`docs/governanca.md` §19), fora do Ralph Loop e sem polling. A promoção para `main` e o Bloco 4 (k6, SLO medido, `docs/desempenho.md`) dependem de aprovação própria.
+1. Fora do loop: commit `feat: add k6 smoke and delivery documentation (F4-T1 to F4-T4)`, push de `feat/f4-k6-homologation` e um único PR para `develop`, ainda sem auto-merge.
+2. O Claude Code executa o ensaio em clone limpo e coleta a evidência conforme a seção F4-T5.
+3. Registro da F4-T5 em `docs/estado-execucao.md` e `docs/ia.md` (`docs: record clean clone rehearsal (F4-T5)`), push, conferência do destino, do SHA final e do check obrigatório aprovado nesse SHA; então auto-merge com `--match-head-commit`, sem polling.
+4. A promoção `develop` → `main` e a entrega no Moodle ficam para a F5 (`docs/governanca.md` §20).
 
 ## Governança
 

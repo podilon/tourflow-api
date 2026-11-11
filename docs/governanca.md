@@ -333,3 +333,30 @@ com versões exatas dentro do contêiner `dev`.
 - Feche a limpeza do PR #9 e trabalhe em `feat/f3-observability-openapi`,
   a partir de `develop`. Até três iterações do Ralph Loop para validação
   local; publicação para `develop` fora do loop e sem polling.
+
+## 20. Smoke k6 e homologação no Bloco 4 (2026-11-11)
+
+O responsável aprovou F4-T1 a F4-T5. A branch
+`feat/f4-k6-homologation` parte de `origin/develop`, após o PR #10.
+Use Paulo Odilon Everton Rodrigues (@podilon) em `CONTRIBUTORS.md`.
+
+- Consulte o manifesto de `grafana/k6:1.0.0`. Valide o digest do
+  índice (`sha256:` e 64 dígitos hexadecimais) e faça pull pela
+  referência completa `tag@digest`. Confirme RepoDigests e versão.
+  Use a mesma referência no Compose e registre o digest e a data.
+- Parametrize projeto, porta no host, volumes e tags das imagens
+  locais, mantendo seus padrões atuais. A API continua na porta 3000
+  dentro da rede. PostgreSQL e k6 ficam sem porta publicada. Preserve
+  os volumes existentes e execute o smoke apenas em leitura.
+- Use até três iterações do Ralph Loop para F4-T1 a F4-T4. Avalie
+  p95 e SLO separadamente, com amostra mínima de 200 para classificar
+  o SLO. Registre falhas, código de saída e todas as medições oficiais.
+  A evidência do clone fica separada do resultado oficial.
+- Publique um único PR para `develop` fora do loop. O Claude Code
+  executa o clone em `.tourflow-f4-clean`, ignorado pelo Git e pelo
+  contexto Docker, com projeto Compose, porta no
+  host, volumes e tags de imagens isolados. Confira a configuração
+  efetiva antes de subir os serviços. Registre o ensaio, faça push e
+  confira o SHA final, o destino e o CI obrigatório aprovado no mesmo
+  SHA. Solicite auto-merge com `--match-head-commit`, sem polling.
+  A promoção para `main` e a entrega no Moodle ficam para F5.

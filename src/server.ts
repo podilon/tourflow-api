@@ -3,13 +3,16 @@ import { loadDbConfig, loadEnv } from './config/env.js';
 import { createDatabaseHealthCheck } from './infra/db/health.js';
 import { createPool } from './infra/db/pool.js';
 import { createPgCatalogRepository } from './repositories/pg/pg-catalog-repository.js';
+import { createPgReservationRepository } from './repositories/pg/pg-reservation-repository.js';
 import { createCatalogService } from './services/catalog-service.js';
+import { createReservationService } from './services/reservation-service.js';
 
 const env = loadEnv();
 const pool = createPool(loadDbConfig());
 const app = createApp({
   checkDatabase: createDatabaseHealthCheck(pool),
   catalogService: createCatalogService(createPgCatalogRepository(pool)),
+  reservationService: createReservationService(createPgReservationRepository(pool)),
 });
 
 const server = app.listen(env.PORT, env.HOST, (error?: Error) => {

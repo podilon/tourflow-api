@@ -68,6 +68,13 @@ services:
       target: dev
     image: tourflow-dev:local
     profiles: ["dev"]
+    # Alvo exclusivo da suíte de integração (conferido em tests/helpers/test-db.ts).
+    environment:
+      TEST_DB_HOST: db-test
+      TEST_DB_PORT: "5432"
+      TEST_DB_NAME: tourflow_test
+      TEST_DB_USER: tourflow
+      TEST_DB_PASSWORD: ${TOURFLOW_DB_PASSWORD:-tourflow_local_only}
     volumes:
       - .:/app
       # Preenchido a partir da imagem na criação; sincronizar após mudar o lockfile (README).

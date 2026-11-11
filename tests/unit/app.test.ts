@@ -11,6 +11,14 @@ const createApp = () =>
   buildApp({
     checkDatabase: async () => undefined,
     catalogService: { listExperiences: async () => [], listDepartures: async () => [] },
+    reservationService: {
+      create: async () => {
+        throw new Error('not used');
+      },
+      get: async () => {
+        throw new Error('not used');
+      },
+    },
   });
 
 afterEach(() => {
@@ -30,6 +38,13 @@ describe('createApp', () => {
 
   it('aplica o mesmo contrato 404 a outros métodos HTTP', async () => {
     const response = await request(createApp()).delete('/reservations/qualquer');
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('não registra rotas de reserva além de POST e GET', async () => {
+    const response = await request(createApp()).put('/reservations');
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe('NOT_FOUND');

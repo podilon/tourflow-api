@@ -51,6 +51,7 @@ function appWith(repository: CatalogRepository = fakeRepository()) {
   return createApp({
     checkDatabase: async () => undefined,
     catalogService: createCatalogService(repository),
+    reservationService: { create: vi.fn(), get: vi.fn() },
   });
 }
 

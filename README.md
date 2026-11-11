@@ -2,7 +2,7 @@
 
 API REST de reservas turísticas com prevenção de sobre-reserva. Escopo, critérios de aceite e arquitetura: [PRD](PRD.md), [ADR-0001](docs/adr/0001-arquitetura.md) e [ROADMAP](ROADMAP.md).
 
-> **Estado atual: F1-T3 (consultas de catálogo).** A API sobe com o PostgreSQL 17, aplica o schema e o catálogo fictício por comandos explícitos, informa a saúde do banco em `/health` e lista experiências e saídas em `GET /experiences` e `GET /departures`. As reservas chegam na F1-T4.
+> **Estado atual: Bloco 1 (F1-T4, F1-T5, F2-T1 e F2-T2), validado localmente.** A API sobe com o PostgreSQL 17, aplica o schema e o catálogo fictício por comandos explícitos, informa a saúde do banco em `/health`, lista experiências e saídas, cria reservas com bloqueio transacional (`POST /reservations`) e as consulta (`GET /reservations/:id`). Testes unitários e de integração com PostgreSQL isolado (`db-test`) rodam via Compose. Logs, métrica, cobertura no CI, OpenAPI e k6 chegam nos blocos seguintes.
 
 ## Pré-requisitos
 
@@ -59,13 +59,49 @@ curl.exe "http://127.0.0.1:3000/departures?experienceId=8f0c2a1e-1b6d-4c1a-9a51-
 - Filtro inválido, vazio, repetido ou parâmetro desconhecido → `400` `{"error":{"code":"VALIDATION_ERROR","message":"Invalid query parameters"}}`, sem ecoar a entrada.
 - Falha do banco nessas rotas → `500` `INTERNAL_ERROR`, sem detalhe interno.
 
-## Banco de teste isolado
+## Reservas
+
+```powershell
+curl.exe --include -X POST http://127.0.0.1:3000/reservations -H "Content-Type: application/json" -d "{\"departureId\":\"3c9e7b52-6a0f-4d8e-8b1c-5f2a9d4e6b01\",\"customerName\":\"Cliente Ficticio\",\"customerEmail\":\"cliente@example.test\",\"participants\":2}"
+curl.exe --include http://127.0.0.1:3000/reservations/<id>
+```
+
+- `POST /reservations` → `201`, cabeçalho `Location: /reservations/<id>` e corpo `{ id, departureId, participants, status: "CONFIRMED", createdAt }`. Nome e e-mail são gravados, mas **nunca devolvidos**.
+- `GET /reservations/:id` → `200` com o mesmo corpo; `404 NOT_FOUND` se não existir; `400 VALIDATION_ERROR` se o id não for UUID.
+- Validação strict (Zod): `departureId` UUID; `customerName` de 1 a 120 caracteres depois de aparar espaços; `customerEmail` válido, até 254 caracteres; `participants` inteiro de 1 a 20; propriedade desconhecida rejeitada. Inválido → `400` `{"error":{"code":"VALIDATION_ERROR","message":"Invalid reservation payload"}}`, sem ecoar a entrada.
+- Saída inexistente → `404 NOT_FOUND`. Saída com início `<=` agora → `409 DEPARTURE_CLOSED`. `participants` acima das vagas → `409 NO_AVAILABILITY`. Nos três casos, nada é gravado. Falha inesperada → `500 INTERNAL_ERROR` genérico.
+
+### Como a sobre-reserva é impedida
+
+Numa única conexão e transação: `BEGIN`; `SET LOCAL lock_timeout = '1500ms'`, `statement_timeout = '1800ms'` e `idle_in_transaction_session_timeout = '5s'`; `SELECT ... FROM departures WHERE id = $1 FOR UPDATE`; `SELECT clock_timestamp()` **depois** de obter o bloqueio (o `now()` seria o início da transação, anterior à espera); verificação de horário e vagas no domínio (`src/domain/reservation.ts`); `INSERT` da reserva; `UPDATE departures SET reserved_seats = reserved_seats + $2`; `COMMIT`. Requisições concorrentes na mesma saída esperam na fila do bloqueio e decidem com o valor já confirmado pela anterior.
+
+- Os limites seguem a ordem lock (1,5 s) < statement (1,8 s) < `query_timeout` do cliente `pg` (2 s): o servidor cancela antes do cliente e a conexão fica em estado conhecido. O limite de ociosidade (5 s) encerra uma transação abandonada.
+- Qualquer falha provoca `ROLLBACK`. A conexão volta ao pool somente depois de uma regra de negócio (404/409) com rollback confirmado; em erro inesperado, falha no `COMMIT` ou rollback malsucedido, ela é descartada (`release(true)`).
+- Expirar o `lock_timeout` produz `500 INTERNAL_ERROR` (o `503` é reservado ao healthcheck pelo PRD).
+
+## Fluxo de ponta a ponta (E2E manual)
+
+Com `api` e `db` no ar, migrations e seed aplicadas:
+
+1. `curl.exe http://127.0.0.1:3000/departures` — a saída `3c9e7b52-…6b01` mostra `availableSeats: 12`.
+2. `POST /reservations` com `participants: 2` nessa saída (exemplo acima) → `201` com `Location`.
+3. `GET /reservations/<id>` → `200` com o mesmo corpo; `GET /departures` agora mostra `availableSeats: 10`.
+4. `POST /reservations` com `participants: 11` → `409 NO_AVAILABILITY`; `availableSeats` continua `10`.
+
+Evidência registrada em `docs/estado-execucao.md` (reserva fictícia `9c08f28d-1577-438f-848b-0ccc191e0bb0`).
+
+## Banco de teste isolado e testes de integração
 
 ```bash
 docker compose --profile test up -d --wait db-test
+docker compose run --rm --no-deps dev npm run test:integration
+docker compose --profile test stop db-test   # descarta o tmpfs
 ```
 
-`db-test` é outra instância (banco `tourflow_test`) com os dados em tmpfs, descartados ao parar o container, e sem porta publicada. Os testes de integração que o usam chegam na F2-T2.
+- `db-test` é outra instância (banco `tourflow_test`) com os dados em tmpfs, descartados ao parar o container, e sem porta publicada.
+- O serviço `dev` recebe `TEST_DB_*`. Antes de aplicar o schema versionado existente ou gravar fixtures, a suíte confere host `db-test`, porta `5432` e banco `tourflow_test` e, já conectada, `current_database()` e `inet_server_port()`; qualquer divergência aborta (`tests/helpers/test-db.ts`). O migrador de desenvolvimento continua restrito a `db/tourflow`.
+- Cada teste cria experiência e saída fictícias com UUIDs novos; nada é apagado.
+- A suíte cobre caso feliz com persistência, consulta, 400, 404, 409 `NO_AVAILABILITY`, 409 `DEPARTURE_CLOSED` e duas provas de concorrência: duas reservas de 2 vagas disputando uma saída de capacidade 3 (as duas esperas pelo bloqueio são observadas em `pg_stat_activity`; resultado: um `201`, um `409`, uma reserva e `reserved_seats = 2`) e uma saída que se encerra durante a espera (`409 DEPARTURE_CLOSED`, nada gravado, embora a transação tenha começado antes do início da saída).
 
 ## Configuração
 
@@ -79,9 +115,11 @@ O serviço `dev` (profile `dev`) contém as ferramentas de desenvolvimento. O c�
 docker compose --profile dev build dev
 docker compose run --rm dev npm run lint
 docker compose run --rm dev npm run typecheck
-docker compose run --rm dev npm run test
+docker compose run --rm dev npm run test:unit   # sem banco; "npm run test" é equivalente
 docker compose run --rm dev npm run build
 ```
+
+Os testes de integração exigem o `db-test` (seção acima). O CI hospedado executa, neste bloco, lint, typecheck, testes unitários e build.
 
 ## Sincronizar dependências do ambiente `dev`
 
@@ -106,7 +144,7 @@ Nunca use `docker compose down -v`: esse comando apaga os volumes do projeto, in
 
 - `Dockerfile` multi-stage: `base` (Node.js 24.22.2 / Alpine 3.24, fixado por digest), `deps` (`npm ci`), `dev`, `build` (compila `src/` para `dist/`) e `runtime` (apenas `dist/`, `db/` e dependências de produção, usuário não-root `node`, `HEALTHCHECK` em `/health`).
 - PostgreSQL `postgres:17.11-alpine`, fixado por digest, em `db` (volume persistente) e `db-test` (tmpfs, profile `test`).
-- `src/app.ts` monta a aplicação Express sem abrir porta, com dependências injetadas e testável com Supertest. `src/server.ts` abre a porta e cria o pool. `src/config/env.ts` valida a configuração com Zod. `src/http/` contém as rotas (`/health`, catálogo), o controller do catálogo e o tratamento de 404 e de erros. `src/services/catalog-service.ts` deriva `availableSeats` e serializa `startsAt`; `src/repositories/` define o contrato de leitura e a implementação PostgreSQL com SQL parametrizado. `src/infra/db/` reúne o pool, o health check e os executores de migration e seed. O SQL versionado fica em `db/migrations/` e `db/seeds/`.
+- `src/app.ts` monta a aplicação Express sem abrir porta, com dependências injetadas e testável com Supertest. `src/server.ts` abre a porta e cria o pool. `src/config/env.ts` valida a configuração com Zod. `src/http/` contém as rotas (`/health`, catálogo, reservas), os controllers e o tratamento de 404 e de erros. `src/domain/reservation.ts` concentra validação do payload e regras de reserva (saída inexistente, encerrada, sem vagas). `src/services/` deriva `availableSeats`, serializa datas e orquestra a reserva; `src/repositories/` define os contratos e as implementações PostgreSQL com SQL parametrizado (a de reservas executa a transação com `FOR UPDATE`). `src/infra/db/` reúne o pool, o health check, a aplicação de migrations (`migrations.ts`, compartilhada com a integração) e os executores de migration e seed. `tests/unit/` usa fakes; `tests/integration/` usa o `db-test`. O SQL versionado fica em `db/migrations/` e `db/seeds/`.
 - Erros seguem o contrato `{"error":{"code":"<CÓDIGO>","message":"..."}}`, sem stack trace na resposta.
 
 ## Observações para Windows

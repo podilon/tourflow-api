@@ -22,8 +22,82 @@
 | PREP-AUTO — Skill e checkpoint | `fdbe62d` | Concluída |
 | F1-T1 — Fundação Docker-first e CI | `develop` em `fd74ca4` (PRs #1 a #4) | Concluída e mesclada |
 | F1-T2 — PostgreSQL, migrations, seed e saúde | `f4c5db9`; merge `2e1a6e3` em `develop` (PR #6) | Concluída e mesclada; CI `43024218169` verde |
+| F1-T3 — Consultas de catálogo | `c53363f`; merge `59b1517` em `develop` (PR #7) | Concluída e mesclada |
 
-## Checkpoint atual — F1-T3 (2026-11-11)
+## Checkpoint atual — Bloco 1: F1-T4, F1-T5, F2-T1 e F2-T2 (2026-11-11)
+
+- Tarefas: reservas (F1-T4), E2E manual documentado (F1-T5), testes unitários (F2-T1) e integração com PostgreSQL real (F2-T2), num único PR (`docs/governanca.md` §17).
+- Branch: `feat/f1-t4-reservations`, criada por `git switch -c feat/f1-t4-reservations origin/develop` em `59b1517`, levando as três alterações de governança preparadas pelo Codex (`.claude/settings.json`, `CLAUDE.md`, `docs/governanca.md` §17), preservadas sem edição.
+- Execução: Ralph Loop, iteração 1 de 3.
+- Situação: **validado localmente**. Sem commit; commit, push, PR e auto-merge ficam fora do loop.
+- Pré-checagens do Bash: `jq` → `/c/ProgramData/chocolatey/bin/jq`; `perl` → `/usr/bin/perl`.
+- Nenhuma dependência instalada, nenhum SQL de migration novo, CI inalterado, nenhum volume excluído.
+
+### Implementação
+
+- `src/domain/reservation.ts`: schema strict do payload (Zod), schema do id, `DomainError` com códigos `NOT_FOUND`, `DEPARTURE_CLOSED`, `NO_AVAILABILITY` e a regra `assertReservable(snapshot, participants)`.
+- `src/repositories/reservation-repository.ts` (contrato) e `src/repositories/pg/pg-reservation-repository.ts`: numa conexão do pool, `BEGIN` → `SET LOCAL lock_timeout '1500ms'`, `statement_timeout '1800ms'`, `idle_in_transaction_session_timeout '5s'` → `SELECT … FOR UPDATE` → `SELECT clock_timestamp()` → regra de domínio → `INSERT` → `UPDATE reserved_seats` → `COMMIT`. Falha → `ROLLBACK`; a conexão volta ao pool só após regra de negócio com rollback confirmado; nos demais casos é descartada (`release(true)`).
+- `src/services/reservation-service.ts`, `src/http/controllers/reservation-controller.ts`, `src/http/routes/reservations.ts`; `src/app.ts` e `src/server.ts` injetam o serviço. Respostas sem nome e e-mail; `201` com `Location`.
+- `src/infra/db/migrations.ts`: aplicação de migrations extraída de `migrate.ts` (mesmo comportamento) para reuso na integração. `migrate.ts` continua restrito a `db/tourflow` via `withWriteTarget`.
+- Testes: `tests/unit/reservation.test.ts`, `tests/unit/pg-reservation-repository.test.ts`, guardas do alvo de teste em `tests/unit/health.test.ts`; `tests/helpers/test-db.ts`, `tests/helpers/global-setup.ts`, `tests/integration/reservations.test.ts`, `vitest.integration.config.ts`. `vitest.config.ts` passa a incluir só `tests/unit/`, então o `npm run test` do CI continua só com unitários.
+- `docker-compose.yml`: o serviço `dev` recebe `TEST_DB_*` (alvo `db-test:5432/tourflow_test`). `package.json`: scripts `test:unit` e `test:integration`.
+
+### Verificações executadas
+
+| Verificação | Resultado |
+| --- | --- |
+| `run --rm --no-deps dev npm run lint` | exit 0, sem avisos |
+| `run --rm --no-deps dev npm run typecheck` | exit 0 (a 1ª execução falhou por tipagem do fake em `pg-reservation-repository.test.ts`; corrigida) |
+| `run --rm --no-deps dev npm run test:unit` | exit 0; 96 testes em 5 arquivos (a 1ª execução teve 1 falha no próprio teste: o parâmetro padrão do fake substituía `undefined`; corrigido) |
+| `run --rm --no-deps dev npm run build` | exit 0 |
+| `--profile test stop db-test` + `up -d --wait db-test` | tmpfs recriado; `Healthy` |
+| `psql` no `db-test` antes da suíte | `current_database()` = `tourflow_test`; `to_regclass('public.experiences')` vazio |
+| `run --rm --no-deps dev npm run test:integration` (1ª) | exit 0; `[db-test] Created schema_migrations`, `Applied migration 0001_initial_schema`; 9 testes aprovados |
+| `run --rm --no-deps dev npm run test:integration` (2ª, mesmo tmpfs) | exit 0; `[db-test] No pending migrations`; 9 testes aprovados |
+| Concorrência (integração) | 2 esperas pelo bloqueio observadas em `pg_stat_activity`; respostas `[201, 409 NO_AVAILABILITY]`; 1 reserva; `reserved_seats = 2` |
+| Saída encerrada durante a espera (integração) | `xact_start` da transação da API anterior a `starts_at`; após o bloqueio, `409 DEPARTURE_CLOSED`; 0 reservas, `reserved_seats = 0` (~720 ms de teste) |
+| `--profile test stop db-test` após os testes | `Stopped` (tmpfs descartado) |
+
+### E2E no runtime local (após a integração verde)
+
+| Etapa | Resultado |
+| --- | --- |
+| Linha de base em `db/tourflow` | 4 saídas, todas com `reserved_seats 0` e 0 reservas |
+| `up --build -d --wait api` | imagem `runtime` reconstruída; `tourflow-db-1 Healthy`, `tourflow-api-1 Healthy` |
+| Sonda 1 (alvo conferido: `DB_HOST=db`, `5432`, `current_database() = tourflow`; 0 reservas → POST) | `HTTP 201 9c08f28d-1577-438f-848b-0ccc191e0bb0`, `Location` correto; `HTTP 200` com corpo idêntico: `{"id":"9c08f28d-1577-438f-848b-0ccc191e0bb0","departureId":"3c9e7b52-6a0f-4d8e-8b1c-5f2a9d4e6b01","participants":2,"status":"CONFIRMED","createdAt":"2026-11-11T14:03:52.812Z"}`, sem nome nem e-mail |
+| Sonda 2 (`participants: 11`) | `HTTP 409 NO_AVAILABILITY`; `availableSeats = 10` antes e depois |
+| Delta em `db/tourflow` | só a saída `3c9e7b52-…6b01`: `reserved_seats 0 → 2`, reservas `0 → 1`, participantes `2`; as outras três saídas inalteradas |
+
+Reserva fictícia da demonstração: `9c08f28d-1577-438f-848b-0ccc191e0bb0` (cliente `Cliente Ficticio E2E`, `cliente.e2e@example.test`). Se a sonda 1 for repetida, ela reutiliza essa reserva em vez de criar outra.
+
+### Verificação pelo host (Windows, executada pelo Codex, somente leitura)
+
+Evidência separada das anteriores, obtida em `127.0.0.1:3000` a partir do Windows, depois do loop:
+
+| Requisição | Resultado |
+| --- | --- |
+| `GET /reservations/9c08f28d-1577-438f-848b-0ccc191e0bb0` | `200`, `status` `CONFIRMED`, 2 participantes, sem nome nem e-mail |
+| `GET /departures` filtrado pela experiência da demonstração | saída `3c9e7b52-…6b01` com `capacity` 12 e `availableSeats` 10 |
+| `GET /health` | `200` |
+
+### Natureza de cada evidência
+
+- **Unitários (96):** executados pelo Claude Code via Compose, sem banco, com fakes. São os únicos que o CI hospedado executa hoje (`npm run test`).
+- **Integração (9):** executados pelo Claude Code localmente via Compose contra o `db-test` (tmpfs). **Ainda não rodam no CI**.
+- **Prova de concorrência:** faz parte desses 9 testes de integração locais (duas esperas observadas, `[201, 409]`, 1 reserva, `reserved_seats = 2`, além da saída encerrada durante a espera). **Ainda não roda no CI**.
+- **E2E no runtime:** as duas sondas do Claude Code dentro do contêiner `api` (POST/GET e 409).
+- **Host:** as três leituras do Codex no Windows (acima), sem nenhuma escrita.
+
+### Estado deixado
+
+- `api` e `db` em execução; `db-test` parado (tmpfs descartado). Volumes `tourflow_pgdata` e `tourflow_dev_node_modules` preservados.
+
+### Pendências
+
+- Commit, push, PR para `develop` e auto-merge: fora do loop.
+- Cobertura e integração no CI: próximo bloco.
+
+## Checkpoint anterior — F1-T3 (2026-11-11)
 
 - Tarefa: F1-T3 — Consultas de catálogo (`GET /experiences`, `GET /departures`).
 - Branch: `feat/f1-t3-catalog-queries`, criada a partir de `origin/develop` em `2e1a6e3`, levando as quatro alterações de governança preparadas pelo Codex (`.claude/settings.json`, `.gitignore`, `CLAUDE.md`, `docs/governanca.md` §16).
@@ -218,7 +292,7 @@ F1-T1 aprovada tecnicamente com ressalvas, depois da rodada de correção 1. Evi
 
 ## Próxima ação
 
-Publicação da F1-T3 por PR de `feat/f1-t3-catalog-queries` para `develop` com auto-merge no HEAD atual do PR (`docs/governanca.md` §16); depois do merge, limpeza somente da branch curta. A promoção para `main` e a F1-T4 dependem de aprovação própria.
+Verificação do Bloco 1 pelo host e publicação de `feat/f1-t4-reservations` por PR para `develop` com auto-merge no HEAD atual (`docs/governanca.md` §17), fora do Ralph Loop. A promoção para `main` e o Bloco 2 dependem de aprovação própria.
 
 ## Governança
 

@@ -10,12 +10,18 @@ import {
   connectionOptions,
   describeDbError,
 } from '../../src/infra/db/pool.js';
+import {
+  assertConnectedTestTarget,
+  assertTestTargetConfig,
+  loadTestDbConfig,
+} from '../helpers/test-db.js';
 
 /** Catálogo fake: estes testes exercitam somente a rota de saúde. */
 const createApp = ({ checkDatabase }: { checkDatabase: DatabaseHealthCheck }) =>
   buildApp({
     checkDatabase,
     catalogService: { listExperiences: async () => [], listDepartures: async () => [] },
+    reservationService: { create: vi.fn(), get: vi.fn() },
   });
 
 describe('GET /health', () => {
@@ -113,6 +119,33 @@ describe('guardas do alvo de escrita (migration e seed)', () => {
     expect(options).not.toHaveProperty('connectionString');
     expect(options.connectionTimeoutMillis).toBeGreaterThan(0);
     expect(options.query_timeout).toBeGreaterThan(0);
+  });
+
+  it('guarda da integração aceita somente db-test:5432/tourflow_test', async () => {
+    const testTarget = { ...target, host: 'db-test', database: 'tourflow_test' };
+    expect(() => assertTestTargetConfig(testTarget)).not.toThrow();
+    for (const other of [target, { ...testTarget, port: 5433 }, { ...testTarget, database: 'tourflow' }]) {
+      expect(() => assertTestTargetConfig(other)).toThrow(/Refusing to run integration tests/);
+    }
+    const reply = (database: string) => ({
+      query: vi.fn(async () => ({ rows: [{ database, port: 5432 }] })),
+    });
+    await expect(assertConnectedTestTarget(reply('tourflow_test'))).resolves.toBeUndefined();
+    await expect(assertConnectedTestTarget(reply('tourflow'))).rejects.toThrow(
+      /Refusing to run integration tests/,
+    );
+  });
+
+  it('a integração lê TEST_DB_* e rejeita redirecionamentos PG*', () => {
+    const source = {
+      TEST_DB_HOST: 'db-test',
+      TEST_DB_PORT: '5432',
+      TEST_DB_NAME: 'tourflow_test',
+      TEST_DB_USER: 'tourflow',
+      TEST_DB_PASSWORD: 'senha-ficticia',
+    };
+    expect(loadTestDbConfig(source)).toMatchObject({ host: 'db-test', port: 5432, database: 'tourflow_test' });
+    expect(() => loadTestDbConfig({ ...source, PGHOST: 'db' })).toThrow(/PGHOST/);
   });
 
   it('descreve falhas por código, sem dados da conexão', () => {

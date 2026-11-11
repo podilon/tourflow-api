@@ -272,3 +272,25 @@ deste escopo.
 - Depois da verificação pelo host, publique para `develop` e solicite
   auto-merge no HEAD atual do PR. Encerre sem polling e, após o merge,
   limpe somente a branch curta. Preserve `develop`, `main` e os volumes.
+
+## 17. Reservas e integração no Bloco 1 (2026-11-11)
+
+O responsável aprovou agrupar F1-T4, F1-T5, F2-T1 e F2-T2 em um PR.
+Não há novas dependências ou novo SQL de migration. O CI hospedado
+continua executando os testes unitários neste bloco. Cobertura e
+integração no CI ficam para o próximo bloco.
+
+- Confirme host `db-test`, porta interna `5432`, banco `tourflow_test`
+  e banco efetivo após conectar, antes de aplicar o schema existente
+  ou gravar fixtures. O migrador de desenvolvimento continua restrito
+  a `db/tourflow`. Preserve o volume persistente de desenvolvimento.
+- No E2E local, permita apenas uma reserva fictícia de duas vagas. A
+  sonda positiva verifica o alvo e reutiliza a reserva identificada
+  se ela já existir. Em caso de resultado incerto, confira o banco
+  antes de repetir qualquer POST. Rode a sonda de rejeição só depois
+  de provar o 409 no banco de teste. As 10 vagas restantes devem
+  permanecer intactas.
+- O Ralph Loop tem até três iterações de implementação e validação
+  local. Faça a publicação para `develop` fora do loop, após aceite,
+  com auto-merge no SHA atual e sem polling. Preserve `main` e
+  `develop`. Não inicie o Bloco 2 com esta autorização.

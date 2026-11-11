@@ -91,6 +91,15 @@ Use os comandos enumerados em `.claude/settings.json`. Verificação pelo
 host, commit, push, PR e auto-merge ficam fora do loop.
 Consulte `docs/governanca.md` §16.
 
+**Bloco 1 autorizado (F1-T4, F1-T5, F2-T1 e F2-T2):** implemente reservas,
+documente o fluxo e valide os testes unitários e de integração no mesmo PR
+para `develop`. O schema existente e as fixtures de integração só podem
+ser aplicados em `db-test:5432/tourflow_test`. No banco local `db/tourflow`,
+está autorizada uma única reserva fictícia de duas vagas para o E2E.
+Use o Ralph Loop por até três iterações na validação local. Git de escrita,
+PR e auto-merge ficam fora do loop e seguem os comandos enumerados para
+`feat/f1-t4-reservations`. Consulte `docs/governanca.md` §17.
+
 - Alteração de PRD/ADR/escopo ou mudança de tecnologia.
 - Instalação de dependência nova não prevista na tarefa.
 - Qualquer migration de alteração estrutural, especialmente destrutiva; executar apenas no banco da TourFlow com alvo verificado.

@@ -109,3 +109,17 @@ Entradas de F0 e F1-T0 reconstruídas a partir do histórico Git e dos documento
 - **Verificação pelo host (Codex, Windows, somente leitura), separada das evidências do loop:** `GET /reservations/9c08f28d-1577-438f-848b-0ccc191e0bb0` → `200`, `CONFIRMED`, 2 participantes, sem nome nem e-mail; `GET /departures` filtrado → saída da demonstração com capacidade 12 e 10 vagas; `GET /health` → `200`.
 - **Alcance das evidências:** os 96 unitários rodam no CI hospedado; os 9 testes de integração, incluindo a prova de concorrência, foram executados apenas localmente contra o `db-test` e ainda não rodam no CI (próximo bloco).
 - **Publicação (fora do loop):** stage explícito, commit, push, PR para `develop` e auto-merge com `--match-head-commit`, executados pelo Claude Code com os comandos enumerados em `.claude/settings.json`. POST, migrations e testes não foram repetidos.
+
+### Bloco 2 — F2-T3 e F2-T4: cobertura e integração no CI (2026-11-11)
+
+- **Finalidade:** cobertura v8 com limiar de 80% de linhas e branches em `src/domain` e `src/services` (PRD RNF-04) e execução da suíte de integração com PostgreSQL real no CI (RNF-05).
+- **Resumo do prompt:** Ralph Loop (até três iterações) com o Bloco 2 aprovado. Pedia conferir `jq`, `perl`, `origin` e o diff; `fetch --prune`, confirmar a remoção remota da branch anterior e a ancestralidade de `61c6c65`; fast-forward de `develop` pelo refspec autorizado; criar `feat/f2-t3-coverage-ci` preservando as três alterações do Codex e só então apagar a branch anterior; instalar somente `@vitest/coverage-v8@5.1.0` no contêiner, reconstruir `dev` e `npm ci`; incluir todos os arquivos de `src/domain` e `src/services`; não baixar limiares nem excluir código; no CI, preservar nome do job, `ubuntu-latest` e gatilhos, rodar cobertura e integração com `db-test` no mesmo job e projeto Compose, resumo e limpeza `if: always()` sem `-v`. Proibia Git de publicação no loop, promoção para `main` e o Bloco 3.
+- **Decisões humanas:** aprovação do Bloco 2, da dependência de cobertura, dos limiares e da integração no `db-test` do CI, com o check obrigatório preservado (`CLAUDE.md` §5, `docs/governanca.md` §18). Permissões preparadas pelo Codex.
+- **Gerado pela IA (Claude Code):** `vitest.config.ts` (bloco `coverage`), o script `test:coverage`, as mudanças em `.github/workflows/ci.yml`, o README e os registros deste arquivo e de `docs/estado-execucao.md`.
+- **Gerado por ferramenta:** a entrada `@vitest/coverage-v8` 5.1.0 no `package.json` e no `package-lock.json`, criada por `npm install --save-dev --save-exact` em contêiner.
+- **Escolhas de implementação para revisão:**
+  - A cobertura é medida só nos unitários, que são os testes das regras; a integração roda separada, sem cobertura, para não mascarar lacunas dos unitários.
+  - Reporter `json-summary` para que o resumo do CI mostre os percentuais reais, lidos com `jq` do arquivo gerado.
+  - O `db-test` sobe depois da cobertura, para que uma falha de unitários não gaste tempo com o PostgreSQL; o build fica por último.
+- **Evidências executadas pelo Claude Code:** `compose config`, lint, typecheck e build com exit 0; `test:coverage` com exit 0, 96 testes, 100% de linhas (29/29) e de branches (8/8); integração com exit 0, 9 de 9 em tmpfs novo, sem oscilação nas provas de concorrência. Nenhum teste novo foi necessário.
+- **Pendências:** commit, push, PR e auto-merge, fora do loop. O workflow só será comprovado no primeiro run hospedado.

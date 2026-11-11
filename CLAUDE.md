@@ -100,6 +100,13 @@ Use o Ralph Loop por até três iterações na validação local. Git de escrita
 PR e auto-merge ficam fora do loop e seguem os comandos enumerados para
 `feat/f1-t4-reservations`. Consulte `docs/governanca.md` §17.
 
+**Bloco 2 autorizado (F2-T3 e F2-T4):** o responsável aprovou
+`@vitest/coverage-v8@5.1.0` como dependência de desenvolvimento em Docker,
+80% de cobertura de linhas e branches e integração no `db-test` do CI.
+Preserve o nome do check obrigatório. Publique `feat/f2-t3-coverage-ci` por
+PR para `develop` após validação local. Ralph Loop tem até três iterações;
+Git de publicação fica fora do loop. Consulte `docs/governanca.md` §18.
+
 - Alteração de PRD/ADR/escopo ou mudança de tecnologia.
 - Instalação de dependência nova não prevista na tarefa.
 - Qualquer migration de alteração estrutural, especialmente destrutiva; executar apenas no banco da TourFlow com alvo verificado.

@@ -23,8 +23,44 @@
 | F1-T1 — Fundação Docker-first e CI | `develop` em `fd74ca4` (PRs #1 a #4) | Concluída e mesclada |
 | F1-T2 — PostgreSQL, migrations, seed e saúde | `f4c5db9`; merge `2e1a6e3` em `develop` (PR #6) | Concluída e mesclada; CI `43024218169` verde |
 | F1-T3 — Consultas de catálogo | `c53363f`; merge `59b1517` em `develop` (PR #7) | Concluída e mesclada |
+| Bloco 1 — F1-T4, F1-T5, F2-T1, F2-T2 | `61c6c65`; merge `90e238e` em `develop` (PR #8) | Concluído e mesclado |
 
-## Checkpoint atual — Bloco 1: F1-T4, F1-T5, F2-T1 e F2-T2 (2026-11-11)
+## Checkpoint atual — Bloco 2: F2-T3 e F2-T4 (2026-11-11)
+
+- Tarefas: cobertura com limiar (F2-T3) e integração com PostgreSQL no CI (F2-T4), num único PR (`docs/governanca.md` §18).
+- Execução: Ralph Loop, iteração 1 de 3. Situação: **validado localmente**. Sem commit; commit, push, PR e auto-merge ficam fora do loop.
+- Pré-checagens: `jq` → `/c/ProgramData/chocolatey/bin/jq`; `perl` → `/usr/bin/perl`; `origin` → `https://github.com/podilon/tourflow-api.git`; árvore com apenas as três alterações de governança preparadas pelo Codex (`.claude/settings.json`, `CLAUDE.md`, `docs/governanca.md` §18; +44 linhas), preservadas.
+- Git: `git fetch --prune origin` removeu `origin/feat/f1-t4-reservations` e trouxe `develop` `59b1517..90e238e`; `ls-remote` confirma `develop` em `90e238e3074c…` e nenhuma branch curta remota; `git merge-base --is-ancestor 61c6c654… origin/develop` → exit 0. `develop` local atualizada por `git fetch origin refs/heads/develop:refs/heads/develop` (fast-forward, `90e238e`). `git switch -c feat/f2-t3-coverage-ci origin/develop` levou as três alterações; só então `git branch -d feat/f1-t4-reservations` (`was 61c6c65`).
+
+### Implementação
+
+- Dependência: `npm install --save-dev --save-exact @vitest/coverage-v8@5.1.0` no contêiner `dev` (12 pacotes; `package.json` e `package-lock.json` atualizados). `--profile dev build dev` e `npm ci` sincronizaram imagem e volume. O audit segue com as mesmas 10 ocorrências moderadas da cadeia de lint já registradas.
+- `vitest.config.ts`: `coverage.provider: 'v8'`, `include` com `src/domain/**/*.ts` e `src/services/**/*.ts` (arquivos não importados entram com 0%), reporters `text` e `json-summary`, `thresholds` de 80% para `lines` e `branches`. Nenhum arquivo excluído, nenhum limiar reduzido. `package.json`: script `test:coverage` (`vitest run --coverage`).
+- `.github/workflows/ci.yml`: mesmo nome de job (`Foundation (Compose lint, typecheck, test, build)`), `ubuntu-latest` e gatilhos inalterados. O passo `Test` virou `Test with coverage`; novos passos `Start db-test` (`--profile test up -d --wait db-test`) e `Integration tests` (`test:integration`) antes do build; resumo com as novas linhas e os percentuais lidos de `coverage/coverage-summary.json`; encerramento `if: always()` com `--profile dev --profile test down --remove-orphans`, sem `-v`. Todas as etapas usam `-p "$CI_PROJECT"`.
+- Nenhum teste novo foi necessário: a cobertura já era 100%.
+
+### Verificações executadas
+
+| Verificação | Resultado |
+| --- | --- |
+| `compose config --quiet` | exit 0 |
+| `run --rm --no-deps dev npm run lint` | exit 0, sem avisos |
+| `run --rm --no-deps dev npm run typecheck` | exit 0 |
+| `run --rm --no-deps dev npm run test:coverage` | exit 0; 96 testes em 5 arquivos; linhas 100% (29/29), branches 100% (8/8), statements 100% (35/35), funções 100% (16/16) |
+| Cobertura por arquivo | `domain/reservation.ts` 16/16 linhas, 6/6 branches; `services/catalog-service.ts` 5/5 linhas, 0 branches; `services/reservation-service.ts` 8/8 linhas, 2/2 branches |
+| `--profile test up -d --wait db-test` | tmpfs novo; `Healthy` |
+| `psql` no `db-test` antes da suíte | `tourflow_test`, `to_regclass('public.experiences')` vazio |
+| `run --rm --no-deps dev npm run test:integration` | exit 0; schema aplicado (`Applied migration 0001_initial_schema`); 9 testes aprovados, incluindo as duas provas de concorrência, sem oscilação |
+| `run --rm --no-deps dev npm run build` | exit 0 |
+| `--profile test stop db-test` | `Stopped` (tmpfs descartado) |
+
+O workflow foi revisado e só pode ser executado de fato no GitHub Actions. O primeiro run hospedado do PR será a evidência do CI.
+
+### Estado deixado
+
+- `api` e `db` em execução, sem alteração de dados; `db-test` parado. Volumes preservados.
+
+## Checkpoint anterior — Bloco 1: F1-T4, F1-T5, F2-T1 e F2-T2 (2026-11-11)
 
 - Tarefas: reservas (F1-T4), E2E manual documentado (F1-T5), testes unitários (F2-T1) e integração com PostgreSQL real (F2-T2), num único PR (`docs/governanca.md` §17).
 - Branch: `feat/f1-t4-reservations`, criada por `git switch -c feat/f1-t4-reservations origin/develop` em `59b1517`, levando as três alterações de governança preparadas pelo Codex (`.claude/settings.json`, `CLAUDE.md`, `docs/governanca.md` §17), preservadas sem edição.
@@ -292,7 +328,7 @@ F1-T1 aprovada tecnicamente com ressalvas, depois da rodada de correção 1. Evi
 
 ## Próxima ação
 
-Verificação do Bloco 1 pelo host e publicação de `feat/f1-t4-reservations` por PR para `develop` com auto-merge no HEAD atual (`docs/governanca.md` §17), fora do Ralph Loop. A promoção para `main` e o Bloco 2 dependem de aprovação própria.
+Publicação de `feat/f2-t3-coverage-ci` por PR para `develop` com auto-merge no HEAD atual (`docs/governanca.md` §18), fora do Ralph Loop; o primeiro run hospedado comprovará cobertura e integração no CI. A promoção para `main` e o Bloco 3 dependem de aprovação própria.
 
 ## Governança
 

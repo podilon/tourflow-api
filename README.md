@@ -2,7 +2,7 @@
 
 API REST de reservas turísticas com prevenção de sobre-reserva. Escopo, critérios de aceite e arquitetura: [PRD](PRD.md), [ADR-0001](docs/adr/0001-arquitetura.md) e [ROADMAP](ROADMAP.md).
 
-> **Estado atual: F1-T1 (fundação Docker-first).** A API sobe, valida a configuração e responde ao contrato de erro (404 em rota desconhecida). Banco de dados, migrations, seed e `/health` chegam na F1-T2; os endpoints de catálogo e reservas, nas tarefas seguintes.
+> **Estado atual: F1-T2 (PostgreSQL, migrations, seed e `/health`).** A API sobe com o PostgreSQL 17, aplica o schema e o catálogo fictício por comandos explícitos e informa a saúde do banco em `/health`. Os endpoints de catálogo e reservas chegam nas tarefas seguintes.
 
 ## Pré-requisitos
 
@@ -11,22 +11,51 @@ API REST de reservas turísticas com prevenção de sobre-reserva. Escopo, crit�
 
 Node.js e npm **não** são necessários no host: todas as execuções de Node.js, npm, lint, testes e build ocorrem em containers.
 
-## Subir a API
+## Subir a API e o banco
 
 ```bash
-docker compose up --build -d api
-docker compose ps api
+docker compose up --build -d --wait api   # sobe db (saudável) e api
+docker compose ps
 ```
 
-A porta é publicada apenas em `127.0.0.1:3000`. Verificação rápida (Windows):
+A porta da API é publicada apenas em `127.0.0.1:3000`. O PostgreSQL (`db`) não publica porta no host; seus dados ficam no volume `tourflow_pgdata`.
+
+## Migrations e seed
+
+Passos explícitos, idempotentes e não destrutivos, executados na imagem da API:
+
+```bash
+docker compose run --rm --no-deps api node dist/infra/db/migrate.js
+docker compose run --rm --no-deps api node dist/infra/db/seed.js
+```
+
+- Antes de gravar, os dois comandos conferem o alvo: host `db`, porta interna `5432`, banco `tourflow` e, já conectados, `current_database()` e `inet_server_port()`. Variáveis `PG*` e `DATABASE_URL` são rejeitadas para que nada redirecione a conexão. Credenciais não aparecem nos logs.
+- A migration roda numa transação, adquire um advisory lock antes de consultar `schema_migrations` e aplica apenas versões ausentes. A segunda execução responde `No pending migrations`.
+- A seed insere duas experiências e quatro saídas **fictícias** com IDs fixos (`ON CONFLICT DO NOTHING`). Ela nunca altera linhas existentes, reservas nem `reserved_seats`. As datas são `CURRENT_DATE + N + TIME '09:00'` com fuso fixado em **UTC** (`SET LOCAL TIME ZONE 'UTC'`): cada saída começa às 09:00 UTC, de 7 a 21 dias depois da data UTC da primeira execução.
+
+## Saúde
 
 ```powershell
-curl.exe --include http://127.0.0.1:3000/rota-inexistente
+curl.exe --include http://127.0.0.1:3000/health
 ```
 
-Resposta esperada: `404` com `{"error":{"code":"NOT_FOUND","message":"Resource not found"}}`.
+- `200` `{"status":"ok","database":"up"}` quando a API alcança o banco.
+- `503` `{"error":{"code":"UNAVAILABLE","message":"Database is unavailable"}}` quando o banco está inacessível. A API continua no ar e volta a responder `200` quando o banco retorna.
+- O `HEALTHCHECK` da imagem `runtime` consulta essa rota. Por isso, o `docker compose ps` mostra `api` como `unhealthy` enquanto o banco estiver parado.
 
-Configuração opcional: copie `.env.example` para `.env` (ignorado pelo Git). Use apenas valores locais e fictícios.
+Rota desconhecida: `404` com `{"error":{"code":"NOT_FOUND","message":"Resource not found"}}`.
+
+## Banco de teste isolado
+
+```bash
+docker compose --profile test up -d --wait db-test
+```
+
+`db-test` é outra instância (banco `tourflow_test`) com os dados em tmpfs, descartados ao parar o container, e sem porta publicada. Os testes de integração que o usam chegam na F2-T2.
+
+## Configuração
+
+Opcional: copie `.env.example` para `.env` (ignorado pelo Git) e use apenas valores locais e fictícios. Sem `.env`, o Compose usa uma senha local fictícia (`TOURFLOW_DB_PASSWORD`), aceitável porque nenhum banco publica porta. O PostgreSQL só lê a senha quando o volume é criado. Trocá-la depois exige recriar o banco, com aprovação, porque isso apaga os dados.
 
 ## Qualidade: lint, typecheck, testes e build
 
@@ -54,15 +83,16 @@ Nenhum container instala dependências ao iniciar. Incluir uma dependência nova
 ## Parar
 
 ```bash
-docker compose stop api   # ou: docker compose down
+docker compose --profile test stop api db db-test   # ou: docker compose down
 ```
 
-Nunca use `docker compose down -v`: esse comando apaga os volumes do projeto.
+Nunca use `docker compose down -v`: esse comando apaga os volumes do projeto, inclusive o banco de desenvolvimento (`tourflow_pgdata`).
 
 ## Imagem e estrutura
 
-- `Dockerfile` multi-stage: `base` (Node.js 24.22.2 / Alpine 3.24, fixado por digest), `deps` (`npm ci`), `dev`, `build` (compila `src/` para `dist/`) e `runtime` (apenas `dist/` e dependências de produção, usuário não-root `node`).
-- `src/app.ts` monta a aplicação Express sem abrir porta (testável com Supertest); `src/server.ts` abre a porta; `src/config/env.ts` valida a configuração com Zod; `src/http/middlewares/` contém o tratamento de 404 e de erros.
+- `Dockerfile` multi-stage: `base` (Node.js 24.22.2 / Alpine 3.24, fixado por digest), `deps` (`npm ci`), `dev`, `build` (compila `src/` para `dist/`) e `runtime` (apenas `dist/`, `db/` e dependências de produção, usuário não-root `node`, `HEALTHCHECK` em `/health`).
+- PostgreSQL `postgres:17.11-alpine`, fixado por digest, em `db` (volume persistente) e `db-test` (tmpfs, profile `test`).
+- `src/app.ts` monta a aplicação Express sem abrir porta, com dependências injetadas e testável com Supertest. `src/server.ts` abre a porta e cria o pool. `src/config/env.ts` valida a configuração com Zod. `src/http/` contém a rota `/health` e o tratamento de 404 e de erros. `src/infra/db/` reúne o pool, o health check e os executores de migration e seed. O SQL versionado fica em `db/migrations/` e `db/seeds/`.
 - Erros seguem o contrato `{"error":{"code":"<CÓDIGO>","message":"..."}}`, sem stack trace na resposta.
 
 ## Observações para Windows

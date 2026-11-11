@@ -20,8 +20,70 @@
 | F0 / Gate G0 | `2f6bd56`, `d9b59b3` | Concluída e aprovada |
 | F1-T0 — Permissões | `1b8bd05` | Concluída, com limitações em `docs/governanca.md` |
 | PREP-AUTO — Skill e checkpoint | `fdbe62d` | Concluída |
+| F1-T1 — Fundação Docker-first e CI | `develop` em `fd74ca4` (PRs #1 a #4) | Concluída e mesclada |
 
-## Checkpoint atual — F1-T1 (2026-11-11)
+## Checkpoint atual — F1-T2 (2026-11-11)
+
+- Tarefa: F1-T2 — Banco, migrations, seed e saúde.
+- Branch: `feat/f1-t2-postgresql-foundation`, criada a partir de `origin/develop` em `fd74ca4`, levando as três alterações de governança do Codex (`.claude/settings.json`, `CLAUDE.md`, `docs/governanca.md` §15).
+- Rodadas de correção: 0 de 3.
+- Situação: **critérios verificados localmente, com a evidência HTTP pelo host pendente** (ver abaixo).
+
+### Ambiente e imagem
+
+- Docker 29.9.2 linux/amd64, Compose v5.6.1, contexto `desktop-linux`.
+- `docker pull postgres:17-alpine` → digest `sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac`; `postgres --version` → `PostgreSQL 17.11`.
+- O Compose fixa a imagem como `postgres:17.11-alpine@sha256:3540c036…`.
+- `cat /etc/alpine-release` falhou com exit 1. O Git Bash converteu o caminho para `C:/Program Files/Git/etc/alpine-release` (conversão MSYS). Não foi uma recusa da política. A versão do Alpine fica **não verificada** e foi omitida da tag. O log do servidor mostra `compiled by gcc (Alpine 15.2.0)`.
+- Antes da execução, o volume `tourflow_pgdata` não existia. Ele foi criado pelo primeiro `up db` e preservado durante todo o ciclo.
+
+### Dependências
+
+- `npm install --save-exact pg` → `pg` 8.23.1 em produção. `npm install --save-dev --save-exact @types/pg` → 8.23.1. Os dois rodaram em container.
+- No runtime, `npm ls --omit=dev --depth=0` mostra express 5.3.0, pg 8.23.1 e zod 4.6.7. O `npm ci --omit=dev` do build informou `found 0 vulnerabilities`. As 10 ocorrências moderadas da cadeia de lint continuam como ressalva da F1-T1.
+
+### Verificações executadas
+
+| Verificação | Resultado |
+| --- | --- |
+| `compose config --quiet` | exit 0 |
+| `--profile dev build dev` | exit 0 |
+| `run --rm --no-deps dev npm run lint` | exit 0, sem avisos |
+| `run --rm --no-deps dev npm run typecheck` | exit 0 |
+| `run --rm --no-deps dev npm run test` | exit 0; 25 testes aprovados em 2 arquivos |
+| `run --rm --no-deps dev npm run build` | exit 0 |
+| `up -d --wait db` | `tourflow-db-1 Healthy` |
+| `up --build -d --wait api` | imagem `runtime` construída com `COPY db` e `HEALTHCHECK`; `tourflow-api-1 Healthy` |
+| `psql`: `current_database()`, `to_regclass('public.schema_migrations')` antes da migration | `tourflow`, vazio (tabela ausente) |
+| migration, 1ª execução | `Created schema_migrations`, `Applied migration 0001_initial_schema`, `Applied 1 migration(s)` |
+| migration, 2ª execução | `No pending migrations`; histórico antes e depois: `0001_initial_schema` |
+| seed, 1ª execução | `Seed inserted 2 experience(s) and 4 departure(s)` |
+| contagens e fingerprint antes da 2ª seed | experiences 2, reservations 0, departures 4, futuras 4, `4213ee8b99f27b76d0d94eb021c0a2bc` |
+| xmin antes da 2ª seed | 6 linhas, todas `752` |
+| seed, 2ª execução | `Seed inserted 0 experience(s) and 0 departure(s)` |
+| contagens, fingerprint e xmin depois da 2ª seed | idênticos: 2 / 0 / 4 / 4, `4213ee8b…`, todas as linhas `752`; histórico de migrations inalterado |
+| `ps -q api` antes de parar o banco | `d959ee589f89…` |
+| `stop db` | `tourflow-db-1 Stopped`; log da API: `PostgreSQL idle client error; connection discarded` (processo não caiu) |
+| `ps` com `db` parado | `tourflow-api-1 … (unhealthy)`, porque o `HEALTHCHECK` recebeu resposta não-2xx de `/health` |
+| `up -d --wait db` (restauração) | `Healthy`; `ps -q api` → mesmo `d959ee589f89…`; `api` voltou a `(healthy)` |
+| contagens e fingerprint depois da restauração | 2 / 0 / 4 / 4, `4213ee8b…` (dados persistidos no volume) |
+| `--profile test up -d --wait db-test` | `Healthy`; `pg_isready -U tourflow -d tourflow_test` → `accepting connections` |
+| `inspect … HostConfig.Tmpfs` de `tourflow-db-test-1` | `{"/var/lib/postgresql/data":""}` |
+| `port db 5432` / `port db-test 5432` | `:0` (nenhuma porta publicada) |
+| `port api 3000` | `127.0.0.1:3000` |
+| `exec -T api id -u` | `1000` (não-root) |
+| Isolamento | Com `db` parado e `db-test` saudável, a API ficou `unhealthy`: ela não alcança o `db-test` |
+
+### Evidência pendente
+
+- `curl.exe --include --max-time 10 http://127.0.0.1:3000/health`, o comando exato da lista allow, foi **negado** pela política de permissões. A causa provável é a regra deny `Bash(curl *)`, que casaria antes do allow. Nada foi feito para contornar a negação.
+- O corpo `503 {"error":{"code":"UNAVAILABLE",...}}` está comprovado pelos testes unitários da rota (Supertest). Em runtime, a comprovação é indireta, pelo `HEALTHCHECK`. Falta a chamada HTTP no host, que o responsável pode executar: `curl.exe --include http://127.0.0.1:3000/health` (200), `docker compose stop db`, de novo o `curl` (503) e `docker compose up -d --wait db`.
+
+### Estado deixado
+
+- `api`, `db` e `db-test` em execução. Volumes `tourflow_pgdata` e `tourflow_dev_node_modules` preservados.
+
+## Checkpoint anterior — F1-T1 (2026-11-11)
 
 - Tarefa: F1-T1 — Fundação Docker-first.
 - Branch: `feat/f1-t1-docker-foundation`.
@@ -97,7 +159,7 @@ F1-T1 aprovada tecnicamente com ressalvas, depois da rodada de correção 1. Evi
 
 ## Próxima ação
 
-Publicação automatizada da F1-T1, delegada pelo responsável ao Claude Code: commit `feat: add Docker-first foundation (F1-T1)`, commit do CI da fundação (`ubuntu-latest`, Docker Compose), push de `feat/f1-t1-docker-foundation`, PR para `main` e merge somente com CI verde no SHA atual do PR e proteções do GitHub satisfeitas. As evidências de aceite continuam as registradas acima: 10 de 10 testes, lint, typecheck e build via Compose, e 404 confirmado pelo responsável no host. A F1-T2 depende de aprovação própria.
+Publicação da F1-T2 por PR de `feat/f1-t2-postgresql-foundation` para `develop`. O auto-merge fica condicionado à confirmação da evidência HTTP pendente pelo host e ao CI verde no SHA atual do PR. A promoção para `main` e a F1-T3 dependem de aprovação própria.
 
 ## Governança
 

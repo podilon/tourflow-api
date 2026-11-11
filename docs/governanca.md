@@ -230,3 +230,26 @@ O push desse SHA para criar a referência é uma exceção pontual de bootstrap.
 - A primeira promoção para `main` parte de `develop`. Confirme as proteções
   de exclusão nas duas branches antes do merge e a presença de `develop`
   depois. Esta configuração não inicia a F1-T2.
+
+## 15. Execução e publicação da F1-T2 (2026-11-11)
+
+O responsável aprovou a F1-T2, incluindo pull do PostgreSQL 17 Alpine,
+instalação de `pg` e `@types/pg` em Docker, migration estrutural e seed
+somente em `db/tourflow` e PR para `develop` com auto-merge.
+
+- A lista Bash libera os comandos planejados no contexto `desktop-linux`
+  e no projeto Compose `tourflow`, as consultas de evidência e o HTTP
+  local em `127.0.0.1:3000/health`. O modo padrão permanece ativo para
+  comandos não enumerados. A política PowerShell não foi ampliada.
+- Os executores de migration e seed devem conferir o host `db`, a porta
+  interna `5432`, o banco `tourflow` e `current_database()` antes de
+  gravar. `db-test` só é iniciado e inspecionado nesta etapa. Preserve
+  volumes e dados. Bancos externos e produção ficam fora do escopo.
+- Git de escrita fica restrito à branch da tarefa e aos caminhos
+  enumerados. Confira o HEAD do PR e o check obrigatório da `develop`
+  antes de pedir auto-merge. O Claude devolve os links e encerra sem
+  polling. Na retomada, verifica o merge, atualiza `develop` por
+  fast-forward e limpa apenas a branch curta.
+- O carregamento das permissões precisa ser confirmado em uma nova
+  sessão. Registre comandos bloqueados e evidências pendentes conforme
+  o resultado observado.

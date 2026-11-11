@@ -2,9 +2,12 @@ import { inspect } from 'node:util';
 import express from 'express';
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createApp } from '../../src/app.js';
-import { loadEnv } from '../../src/config/env.js';
+import { createApp as buildApp } from '../../src/app.js';
+import { loadDbConfig, loadEnv } from '../../src/config/env.js';
 import { errorHandler } from '../../src/http/middlewares/error-handler.js';
+
+/** Aplicação com health check fake: estes testes não acessam banco. */
+const createApp = () => buildApp({ checkDatabase: async () => undefined });
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -116,4 +119,40 @@ describe('loadEnv', () => {
     );
     expect(() => loadEnv({ PORT: '70000', NODE_ENV: 'staging' })).toThrow(/NODE_ENV/);
   });
+});
+
+describe('loadDbConfig', () => {
+  const valid = {
+    DB_HOST: 'db',
+    DB_PORT: '5432',
+    DB_NAME: 'tourflow',
+    DB_USER: 'tourflow',
+    DB_PASSWORD: 'senha-ficticia',
+  };
+
+  it('converte as variáveis discretas em parâmetros de conexão', () => {
+    expect(loadDbConfig(valid)).toEqual({
+      host: 'db',
+      port: 5432,
+      database: 'tourflow',
+      user: 'tourflow',
+      password: 'senha-ficticia',
+    });
+  });
+
+  it('falha citando apenas os nomes ausentes, sem ecoar a senha', () => {
+    const attempt = () => loadDbConfig({ ...valid, DB_HOST: '', DB_PORT: 'x' });
+
+    expect(attempt).toThrow('Invalid environment configuration: DB_HOST, DB_PORT');
+    expect(() => loadDbConfig({ DB_PASSWORD: 'senha-ficticia' })).not.toThrow(/senha-ficticia/);
+  });
+
+  it.each(['PGOPTIONS', 'PGHOST', 'PGSSLMODE', 'pgdatabase', 'DATABASE_URL'])(
+    'rejeita a variável de redirecionamento %s',
+    (name) => {
+      expect(() => loadDbConfig({ ...valid, [name]: 'qualquer' })).toThrow(
+        `Unsupported connection override variables: ${name}`,
+      );
+    },
+  );
 });

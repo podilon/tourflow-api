@@ -110,8 +110,8 @@ Git de publicação fica fora do loop. Consulte `docs/governanca.md` §18.
 **Bloco 4 autorizado (F4-T1 a F4-T5):** execute em Docker na branch
 `feat/f4-k6-homologation`, conforme a seção 20 de `docs/governanca.md`.
 O Ralph Loop tem até três iterações para F4-T1 a F4-T4. Publique em um
-único PR para `develop` fora do loop. O responsável executa o clone
-limpo. Solicite auto-merge após registrar esse ensaio e confirmar o
+único PR para `develop` fora do loop. O Claude Code executa o clone
+limpo isolado. Solicite auto-merge após registrar esse ensaio e confirmar o
 CI obrigatório no SHA final, sem polling.
 
 **Bloco 3 autorizado (F3-T1 a F3-T4):** implemente logs, métricas, SLO e

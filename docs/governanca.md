@@ -352,8 +352,9 @@ Use Paulo Odilon Everton Rodrigues (@podilon) em `CONTRIBUTORS.md`.
   p95 e SLO separadamente, com amostra mínima de 200 para classificar
   o SLO. Registre falhas, código de saída e todas as medições oficiais.
   A evidência do clone fica separada do resultado oficial.
-- Publique um único PR para `develop` fora do loop. O responsável
-  executa o clone em diretório novo, com projeto Compose, porta no
+- Publique um único PR para `develop` fora do loop. O Claude Code
+  executa o clone em `.tourflow-f4-clean`, ignorado pelo Git e pelo
+  contexto Docker, com projeto Compose, porta no
   host, volumes e tags de imagens isolados. Confira a configuração
   efetiva antes de subir os serviços. Registre o ensaio, faça push e
   confira o SHA final, o destino e o CI obrigatório aprovado no mesmo

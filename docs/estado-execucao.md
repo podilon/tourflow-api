@@ -29,8 +29,8 @@
 
 ## Checkpoint atual — Bloco 4: F4-T1 a F4-T4 (2026-11-11)
 
-- Tarefas: smoke k6 (F4-T1), resultado real em `docs/desempenho.md` (F4-T2), revisão de segurança (F4-T3) e documentação de entrega (F4-T4), num único PR para `develop` (`docs/governanca.md` §20). O ensaio em clone limpo (F4-T5) fica fora do loop e é executado pelo responsável depois do push.
-- Execução: Ralph Loop, iteração 1 de 3. Situação: **validado localmente**. Commit, push, PR, F4-T5 e auto-merge ficam fora do loop.
+- Tarefas: smoke k6 (F4-T1), resultado real em `docs/desempenho.md` (F4-T2), revisão de segurança (F4-T3) e documentação de entrega (F4-T4), num único PR para `develop` (`docs/governanca.md` §20). O ensaio em clone limpo (F4-T5) fica fora do loop e é executado pelo Claude Code depois do push.
+- Execução: Ralph Loop, iteração 1 de 3. Situação: **validado localmente**. Commit, push, PR, F4-T5 e auto-merge ficam fora do loop. Commit `2820b89` publicado no PR #11; F4-T5 executada pelo Claude Code em 2026-11-11 (ver abaixo).
 
 ### Início
 
@@ -87,88 +87,53 @@
 - `prom-client` 15.1.3 está marcado como deprecated no npm; a troca exige nova aprovação.
 - O commit `c5a83d0` não tem o trailer `Co-Authored-By`, porque a regra allow só cobre a mensagem exata. A autoria por IA está em `docs/ia.md`.
 
-### F4-T5 — comandos do ensaio em clone limpo (a executar pelo responsável)
+### F4-T5 — ensaio em clone limpo pelo Claude Code
 
-Depois do push da branch, num terminal PowerShell novo. Não toca no projeto `tourflow`, na porta 3000, no volume `tourflow_pgdata` nem nas imagens `:local`. Substitua `<SHA_PUBLICADO>` pelo SHA do PR informado no relatório de publicação.
+Fora do Ralph Loop, clone a branch publicada do PR #11 em
+`.tourflow-f4-clean` e confirme o SHA
+`2820b89d03a1799fafdc46e1838a1c1391aa8142`. Use os comandos do clone na
+lista allow. Confira antes de subir serviços o projeto `tourflow_clean`,
+o bind `127.0.0.1:3100` para a porta interna `3000`, os volumes
+`tourflow_clean_pgdata` e `tourflow_clean_dev_node_modules`, as tags
+`:clean` e a ausência de portas publicadas nos bancos e no k6.
 
-```powershell
-# 1. Clone novo e conferência do SHA publicado
-cd "C:\Users\podil\PROJETOS\FULL CYCLE"
-git clone --branch feat/f4-k6-homologation https://github.com/podilon/tourflow-api.git tourflow-api-clean
-cd tourflow-api-clean
-$expected = '<SHA_PUBLICADO>'
-$actual = git rev-parse HEAD
-"HEAD do clone: $actual"
-if ($actual -ne $expected) { throw "SHA divergente: esperado $expected, obtido $actual. Não continue." }
+Reproduza o fluxo do README no clone. Para o smoke, crie
+`performance/results/clone-rehearsal` no clone e use o comando k6
+autorizado com `RESULTS_DIR=../results/clone-rehearsal`. Confirme que
+o JSON do ensaio é novo e que o JSON oficial versionado permanece
+intacto. Registre SHA, configuração, HTTP, testes, p95, amostra, SLO e
+exits. Pare só os serviços do clone, preservando volumes.
 
-# 2. .env do clone (passo opcional do README) com isolamento
-Copy-Item .env.example .env
-@'
-COMPOSE_PROJECT_NAME=tourflow_clean
-TOURFLOW_API_PORT=3100
-TOURFLOW_PGDATA_VOLUME=tourflow_clean_pgdata
-TOURFLOW_NODE_MODULES_VOLUME=tourflow_clean_dev_node_modules
-TOURFLOW_IMAGE_TAG=clean
-'@ | Add-Content .env
+#### Resultado do ensaio (2026-11-11, Claude Code)
 
-# 3. Configuração efetiva ANTES de subir qualquer serviço
-$cfg = docker --context desktop-linux compose --profile dev --profile test --profile perf config --format json | ConvertFrom-Json
-$api = $cfg.services.api.ports[0]
-[pscustomobject]@{
-  project       = $cfg.name
-  api_host_ip   = $api.host_ip
-  api_published = $api.published
-  api_target    = $api.target
-  pgdata_volume = $cfg.volumes.tourflow_pgdata.name
-  nm_volume     = $cfg.volumes.tourflow_dev_node_modules.name
-  api_image     = $cfg.services.api.image
-  dev_image     = $cfg.services.dev.image
-  db_ports      = [string]$cfg.services.db.ports
-  dbtest_ports  = [string]$cfg.services.'db-test'.ports
-  k6_ports      = [string]$cfg.services.k6.ports
-} | Format-List
-if ($cfg.name -ne 'tourflow_clean' -or $api.host_ip -ne '127.0.0.1' -or "$($api.published)" -ne '3100' -or "$($api.target)" -ne '3000' -or
-    $cfg.volumes.tourflow_pgdata.name -ne 'tourflow_clean_pgdata' -or $cfg.volumes.tourflow_dev_node_modules.name -ne 'tourflow_clean_dev_node_modules' -or
-    $cfg.services.api.image -ne 'tourflow-api:clean' -or $cfg.services.dev.image -ne 'tourflow-dev:clean' -or
-    $cfg.services.db.ports -or $cfg.services.'db-test'.ports -or $cfg.services.k6.ports) {
-  throw 'Configuração efetiva inesperada. Não suba os serviços.'
-}
-'CONFIG OK: tourflow_clean, 127.0.0.1:3100->3000, volumes e tags exclusivos, bancos e k6 sem porta'
+- **Clone:** `git clone --branch feat/f4-k6-homologation --single-branch https://github.com/podilon/tourflow-api.git .tourflow-f4-clean` (exit 0). O destino não existia antes. `HEAD` do clone → `refs/heads/feat/f4-k6-homologation` = `2820b89d03a1799fafdc46e1838a1c1391aa8142`, igual ao `headRefOid` do PR #11 e ao `ls-remote`.
+- **`.env` do clone:** valores fictícios do `.env.example` mais `COMPOSE_PROJECT_NAME=tourflow_clean`, `TOURFLOW_API_PORT=3100`, `TOURFLOW_PGDATA_VOLUME=tourflow_clean_pgdata`, `TOURFLOW_NODE_MODULES_VOLUME=tourflow_clean_dev_node_modules` e `TOURFLOW_IMAGE_TAG=clean`. Como a regra `Read(./**/.env)` também bloqueia a escrita pela ferramenta Write, o arquivo foi preparado no scratchpad da sessão e copiado com `cp`, com confirmação do responsável (regra `ask`). A senha não foi impressa.
+- **Configuração efetiva** (`config --format json` com os profiles `dev`, `test` e `perf`, filtrado por `jq` para omitir o ambiente): projeto `tourflow_clean`; `api` `tourflow-api:clean` somente em `127.0.0.1:3100→3000`; `dev` `tourflow-dev:clean`; `db`, `db-test` e `k6` sem portas; volumes físicos `tourflow_clean_pgdata` e `tourflow_clean_dev_node_modules`; `db-test` em tmpfs; `/scripts` do k6 somente leitura; Postgres e k6 fixados por digest.
 
-# 4. Comandos do README (anote o $LASTEXITCODE de cada um)
-docker --context desktop-linux compose up --build -d --wait api; "exit=$LASTEXITCODE"
-docker --context desktop-linux compose ps
-docker --context desktop-linux compose run --rm --no-deps api node dist/infra/db/migrate.js; "exit=$LASTEXITCODE"
-docker --context desktop-linux compose run --rm --no-deps api node dist/infra/db/seed.js; "exit=$LASTEXITCODE"
-curl.exe --include http://127.0.0.1:3100/health
-curl.exe http://127.0.0.1:3100/departures
-docker --context desktop-linux compose --profile dev build dev; "exit=$LASTEXITCODE"
-docker --context desktop-linux compose run --rm dev npm run lint; "exit=$LASTEXITCODE"
-docker --context desktop-linux compose run --rm dev npm run typecheck; "exit=$LASTEXITCODE"
-docker --context desktop-linux compose run --rm dev npm run test:coverage; "exit=$LASTEXITCODE"
-docker --context desktop-linux compose --profile test up -d --wait db-test; "exit=$LASTEXITCODE"
-docker --context desktop-linux compose run --rm --no-deps dev npm run test:integration; "exit=$LASTEXITCODE"
-docker --context desktop-linux compose run --rm dev npm run build; "exit=$LASTEXITCODE"
-docker --context desktop-linux compose --profile perf run --rm --no-deps k6 run smoke.js; "k6 exit=$LASTEXITCODE"
+| Etapa no clone (`-p tourflow_clean`) | Resultado |
+| --- | --- |
+| `up --build -d --wait api` | exit 0; `db` e `api` `Healthy`; `ps`: `127.0.0.1:3100->3000/tcp`, `db` só `5432/tcp` interno |
+| `run --rm --no-deps api node dist/infra/db/migrate.js` | exit 0; `Applied migration 0001_initial_schema` |
+| `run --rm --no-deps api node dist/infra/db/seed.js` | exit 0; 2 experiências e 4 saídas |
+| HTTP | `curl.exe` pelo host foi bloqueado pela regra `deny` `Bash(curl *)`, que prevalece sobre a entrada allow. Com a decisão do responsável, a verificação usou `exec -T api node -e fetch(...)` na porta interna e `port api 3000`. Resultados: `/health` **200** `{"status":"ok","database":"up"}`, `/departures` **200** com 4 itens (exit 0) e bind `127.0.0.1:3100` (exit 0). A requisição pelo bind do host não foi executada |
+| `--profile dev build dev` | exit 0 (`tourflow-dev:clean`) |
+| `npm run lint` | exit 0, sem avisos |
+| `npm run typecheck` | exit 0 |
+| `npm run test:coverage` | exit 0; 122 testes em 7 arquivos; 100% de statements, branches, funções e linhas |
+| `--profile test up -d --wait db-test` + `npm run test:integration` | exit 0; schema aplicado no `db-test` do clone; 10 de 10, incluindo concorrência |
+| `npm run build` | exit 0 |
+| `mkdir performance/results/clone-rehearsal` | diretório novo e vazio antes do smoke |
+| `--profile perf run --rm --no-deps k6 run -e RESULTS_DIR=../results/clone-rehearsal smoke.js` | **exit 0**; 571 requisições; p95 **2,063 ms** (`p(95)<500` OK); `slo_departures_ok` **100,00% (571/571)** (`rate>=0.99` OK); SLO **ATINGIDO** (mínimo de 200) |
+| JSON do ensaio | `performance/results/clone-rehearsal/smoke-summary.json` no clone, novo (`generatedAt` `2026-11-11T16:18:32.446Z`), 816 bytes |
+| JSON oficial | SHA-256 `2d54237b…a231e555` antes e depois do smoke, idêntico no clone e no repositório principal; `git status` sem alteração em `performance/` |
+| `--profile test stop api db db-test` | serviços do clone parados; `ps` vazio; volumes `tourflow_clean_*` preservados |
 
-# 5. Resultado do ensaio em arquivo separado; o JSON versionado é restaurado
-Copy-Item performance\results\smoke-summary.json performance\results\clone-rehearsal-summary.json
-git restore -- performance/results/smoke-summary.json
-git diff --exit-code -- performance/results/smoke-summary.json; "versionado intacto=$($LASTEXITCODE -eq 0)"
-git status --short
-Get-Content performance\results\clone-rehearsal-summary.json
-
-# 6. Parar o ambiente do clone (sem -v)
-docker --context desktop-linux compose --profile test stop api db db-test
-```
-
-- **Saídas a trazer:** a linha `HEAD do clone`; o bloco da etapa 3 com `CONFIG OK`; o `exit=` de cada comando da etapa 4; as respostas de `/health` e `/departures`; os totais de testes e a tabela de cobertura; o resumo final do k6 com `k6 exit=`; a etapa 5 completa (`versionado intacto=True`, `git status --short` mostrando só `?? performance/results/clone-rehearsal-summary.json` e o conteúdo do JSON do ensaio).
-- O resultado do k6 no clone é **evidência do ensaio**, registrada separadamente do resultado oficial em `docs/desempenho.md`. O `clone-rehearsal-summary.json` fica no clone e não é versionado; seus números são transcritos no registro da F4-T5.
-- A remoção do diretório `tourflow-api-clean` e dos recursos `tourflow_clean_*` fica com o responsável (ROADMAP, rollback F4), sem `down -v` no projeto `tourflow`.
+- A evidência do clone é separada do resultado oficial (572 requisições, p95 1,913 ms, SLO 100%) e não o substitui.
 
 ### Estado deixado
 
 - `api` e `db` do projeto `tourflow` em execução, sem alteração de dados; `db-test` parado; volumes preservados.
+- Projeto `tourflow_clean` parado, com volumes `tourflow_clean_pgdata` e `tourflow_clean_dev_node_modules`, imagens `:clean` e o diretório `.tourflow-f4-clean` (ignorado pelo Git e pelo contexto Docker) preservados.
 
 ## Checkpoint anterior — Bloco 3: F3-T1 a F3-T4 (2026-11-11)
 
@@ -525,7 +490,7 @@ F1-T1 aprovada tecnicamente com ressalvas, depois da rodada de correção 1. Evi
 ## Próxima ação
 
 1. Fora do loop: commit `feat: add k6 smoke and delivery documentation (F4-T1 to F4-T4)`, push de `feat/f4-k6-homologation` e um único PR para `develop`, ainda sem auto-merge.
-2. O responsável executa o ensaio em clone limpo (comandos na seção F4-T5 acima) e traz a evidência.
+2. O Claude Code executa o ensaio em clone limpo e coleta a evidência conforme a seção F4-T5.
 3. Registro da F4-T5 em `docs/estado-execucao.md` e `docs/ia.md` (`docs: record clean clone rehearsal (F4-T5)`), push, conferência do destino, do SHA final e do check obrigatório aprovado nesse SHA; então auto-merge com `--match-head-commit`, sem polling.
 4. A promoção `develop` → `main` e a entrega no Moodle ficam para a F5 (`docs/governanca.md` §20).
 

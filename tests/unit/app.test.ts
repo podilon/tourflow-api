@@ -6,8 +6,12 @@ import { createApp as buildApp } from '../../src/app.js';
 import { loadDbConfig, loadEnv } from '../../src/config/env.js';
 import { errorHandler } from '../../src/http/middlewares/error-handler.js';
 
-/** Aplicação com health check fake: estes testes não acessam banco. */
-const createApp = () => buildApp({ checkDatabase: async () => undefined });
+/** Aplicação com dependências fake: estes testes não acessam banco. */
+const createApp = () =>
+  buildApp({
+    checkDatabase: async () => undefined,
+    catalogService: { listExperiences: async () => [], listDepartures: async () => [] },
+  });
 
 afterEach(() => {
   vi.restoreAllMocks();

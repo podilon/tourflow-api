@@ -1,7 +1,8 @@
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
-import { createApp } from '../../src/app.js';
+import { createApp as buildApp } from '../../src/app.js';
 import type { DbConfig } from '../../src/config/env.js';
+import type { DatabaseHealthCheck } from '../../src/infra/db/health.js';
 import { createDatabaseHealthCheck } from '../../src/infra/db/health.js';
 import {
   assertConnectedWriteTarget,
@@ -9,6 +10,13 @@ import {
   connectionOptions,
   describeDbError,
 } from '../../src/infra/db/pool.js';
+
+/** Catálogo fake: estes testes exercitam somente a rota de saúde. */
+const createApp = ({ checkDatabase }: { checkDatabase: DatabaseHealthCheck }) =>
+  buildApp({
+    checkDatabase,
+    catalogService: { listExperiences: async () => [], listDepartures: async () => [] },
+  });
 
 describe('GET /health', () => {
   it('responde 200 quando o banco responde', async () => {

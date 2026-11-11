@@ -192,3 +192,41 @@ manutenção só pode ser limpa após seu próprio merge. Para outras tarefas,
 inclua a branch específica ao aprovar os comandos de publicação e limpeza.
 O CI continua assíncrono: se estiver pendente, registre o PR e encerre a
 sessão. Retome após a conclusão do CI para verificar o merge e limpar.
+
+## 13. Cerimônia de branches do Moodle (2026-11-11)
+
+O responsável informou que a cerimônia do curso exige `develop`. Crie essa
+branch a partir da `main` pós-PR #2, em `40f3f30`, se ela ainda não existir.
+O push desse SHA para criar a referência é uma exceção pontual de bootstrap.
+
+- `main` e `develop` são permanentes. Tarefas partem de `develop` e retornam
+  a ela por PR. A entrega promove `develop` para `main` por PR.
+- Aplique e confirme as regras de exclusão e de non-fast-forward nas duas
+  branches antes de promover `develop` para `main`. O payload revisado fica
+  em `.github/rulesets/permanent-branches.json`. Consulte as regras
+  existentes antes de criar um ruleset e preserve proteções preexistentes.
+- Adapte o CI hospedado em `chore/moodle-develop-ci`, com PR para `develop`.
+  Valide os PRs e pushes para `main` e `develop` via Docker Compose.
+- Habilite check obrigatório e auto-merge em checkpoint posterior, após
+  comprovar que o workflow dispara para as bases pretendidas. A limpeza
+  automática se aplica apenas a branches curtas.
+
+## 14. Check obrigatório e publicação assíncrona (2026-11-11)
+
+- O CI hospedado executa para PRs dirigidos a `main` e `develop` e para
+  pushes nas duas branches. Evidências: PR #2 para `main`, PR #3 para
+  `develop` e run 43016767280 após o merge do PR #3 em `develop`.
+- O ruleset `Require TourFlow CI before merge` exige PR e o check
+  `Foundation (Compose lint, typecheck, test, build)` nas duas branches.
+  A proposta não exige um número mínimo de aprovações adicionais nem
+  sincronização estrita com a base. Outras regras existentes continuam
+  valendo. O ruleset de branches permanentes mantém a proteção contra
+  exclusão e non-fast-forward.
+- Verifique as regras efetivas e só então habilite auto-merge no repositório.
+  Confira o repositório, a base e o HEAD atual do PR antes de usar
+  `--match-head-commit`. GitHub aguarda o CI; Claude retorna os links e encerra
+  quando o merge estiver pendente. Retome para confirmar o merge, sincronizar
+  as referências e limpar apenas a branch curta.
+- A primeira promoção para `main` parte de `develop`. Confirme as proteções
+  de exclusão nas duas branches antes do merge e a presença de `develop`
+  depois. Esta configuração não inicia a F1-T2.

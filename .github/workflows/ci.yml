@@ -4,14 +4,17 @@
 name: CI
 
 on:
+  # Branches permanentes do fluxo do curso: tarefas → develop → main.
   push:
     branches:
       - main
+      - develop
   # Runner hospedado (ubuntu-latest) e GITHUB_TOKEN somente leitura; pull_request
   # (não pull_request_target) não expõe segredos a PRs de forks.
   pull_request:
     branches:
       - main
+      - develop
 
 permissions:
   contents: read

@@ -210,3 +210,23 @@ O push desse SHA para criar a referência é uma exceção pontual de bootstrap.
 - Habilite check obrigatório e auto-merge em checkpoint posterior, após
   comprovar que o workflow dispara para as bases pretendidas. A limpeza
   automática se aplica apenas a branches curtas.
+
+## 14. Check obrigatório e publicação assíncrona (2026-11-11)
+
+- O CI hospedado executa para PRs dirigidos a `main` e `develop` e para
+  pushes nas duas branches. Evidências: PR #2 para `main`, PR #3 para
+  `develop` e run 43016767280 após o merge do PR #3 em `develop`.
+- O ruleset `Require TourFlow CI before merge` exige PR e o check
+  `Foundation (Compose lint, typecheck, test, build)` nas duas branches.
+  A proposta não exige um número mínimo de aprovações adicionais nem
+  sincronização estrita com a base. Outras regras existentes continuam
+  valendo. O ruleset de branches permanentes mantém a proteção contra
+  exclusão e non-fast-forward.
+- Verifique as regras efetivas e só então habilite auto-merge no repositório.
+  Confira o repositório, a base e o HEAD atual do PR antes de usar
+  `--match-head-commit`. GitHub aguarda o CI; Claude retorna os links e encerra
+  quando o merge estiver pendente. Retome para confirmar o merge, sincronizar
+  as referências e limpar apenas a branch curta.
+- A primeira promoção para `main` parte de `develop`. Confirme as proteções
+  de exclusão nas duas branches antes do merge e a presença de `develop`
+  depois. Esta configuração não inicia a F1-T2.

@@ -142,3 +142,27 @@ Não exercitadas por serem destrutivas, remotas ou exigirem Docker:
 | Inclusão manual da regra `Edit(./.claude/settings.json)` | Não |
 | Emenda do ROADMAP sobre `.gitignore` e autoproteção | Não |
 | Registro do uso de IA em `docs/ia.md` | Não (previsto para a F1-T1) |
+
+## 11. Publicação automatizada da F1-T1 (2026-11-11)
+
+O responsável autorizou delegar ao Claude Code a publicação da F1-T1 no
+repositório `podilon/tourflow-api`, pela branch
+`feat/f1-t1-docker-foundation`. As seções anteriores preservam as evidências
+históricas da F1-T0.
+
+- O Bash tem permissões explícitas para a leitura remota necessária, o stage
+  dos caminhos enumerados, os commits desta entrega, o push da branch e as
+  operações previstas de PR e CI. As regras de Git de escrita em PowerShell
+  permanecem como estavam. Os comandos Bash fora da lista não ganham permissão
+  automática.
+- Antes de cada operação de publicação, confira o diretório, o `origin`, a
+  branch, o conteúdo do stage e o escopo do PR. Para o merge, confirme o CI
+  verde no SHA atual e envie esse SHA a `--match-head-commit`. Preserve todas
+  as proteções do GitHub.
+- O primeiro CI usa `ubuntu-latest` e executa lint, typecheck, testes e build
+  no Docker Compose. O runner Windows permanece fora deste workflow público.
+  Sua adoção exige uma decisão própria sobre isolamento e governança.
+- A lista de permissões reduz prompts para comandos correspondentes. Ela não
+  valida a branch ou o SHA por conta própria e não substitui as proteções do
+  GitHub. O carregamento e a correspondência no Claude Code devem ser
+  confirmados na nova sessão. Não use bypass se uma regra não corresponder.

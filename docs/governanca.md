@@ -192,3 +192,21 @@ manutenção só pode ser limpa após seu próprio merge. Para outras tarefas,
 inclua a branch específica ao aprovar os comandos de publicação e limpeza.
 O CI continua assíncrono: se estiver pendente, registre o PR e encerre a
 sessão. Retome após a conclusão do CI para verificar o merge e limpar.
+
+## 13. Cerimônia de branches do Moodle (2026-11-11)
+
+O responsável informou que a cerimônia do curso exige `develop`. Crie essa
+branch a partir da `main` pós-PR #2, em `40f3f30`, se ela ainda não existir.
+O push desse SHA para criar a referência é uma exceção pontual de bootstrap.
+
+- `main` e `develop` são permanentes. Tarefas partem de `develop` e retornam
+  a ela por PR. A entrega promove `develop` para `main` por PR.
+- Aplique e confirme as regras de exclusão e de non-fast-forward nas duas
+  branches antes de promover `develop` para `main`. O payload revisado fica
+  em `.github/rulesets/permanent-branches.json`. Consulte as regras
+  existentes antes de criar um ruleset e preserve proteções preexistentes.
+- Adapte o CI hospedado em `chore/moodle-develop-ci`, com PR para `develop`.
+  Valide os PRs e pushes para `main` e `develop` via Docker Compose.
+- Habilite check obrigatório e auto-merge em checkpoint posterior, após
+  comprovar que o workflow dispara para as bases pretendidas. A limpeza
+  automática se aplica apenas a branches curtas.

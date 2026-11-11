@@ -7,7 +7,7 @@
 
 **Evidência de referência:** CI de push em `main` no SHA `f0237c8`, com 100% de cobertura de linhas e branches em `src/domain/**` e `src/services/**`. [Run de referência](https://github.com/podilon/tourflow-api/actions/runs/43059539492)
 
-[Guia rápido](#3-pré-requisitos-configuração-e-guia-rápido) · [Arquitetura](#2-arquitetura-e-stack) · [Artefatos](#artefatos-para-avaliação) · [Rubrica](#82-matriz-da-rubrica) · [Entrega](#83-entrega)
+[Guia rápido](#3-pré-requisitos-configuração-e-guia-rápido) · [Demonstração pública](#demonstração-pública-no-render) · [Arquitetura](#2-arquitetura-e-stack) · [Artefatos](#artefatos-para-avaliação) · [Rubrica](#82-matriz-da-rubrica) · [Entrega](#83-entrega)
 
 ## Artefatos para avaliação
 
@@ -42,7 +42,7 @@ O TourFlow API resolve esse ponto num escopo pequeno e verificável: a confirma�
 
 ### Quem usa
 
-No escopo do projeto ([PRD](PRD.md) §2), a API é consumida por um **operador ou integrador HTTP** que consulta o catálogo e solicita reservas, por exemplo um sistema de balcão ou de parceiro. Não há autenticação nem painel web. A API roda apenas em ambiente local e educacional, publicada em `127.0.0.1`.
+No escopo do projeto ([PRD](PRD.md) §2), a API é consumida por um **operador ou integrador HTTP** que consulta o catálogo e solicita reservas, por exemplo um sistema de balcão ou de parceiro. O fluxo completo de reservas é executado localmente com Docker Compose, em `127.0.0.1`. A [demonstração pública no Render](#demonstração-pública-no-render) oferece um roteiro complementar de consulta.
 
 ### Fronteiras do domínio
 
@@ -54,7 +54,7 @@ No escopo do projeto ([PRD](PRD.md) §2), a API é consumida por um **operador o
 
 O `availableSeats` do catálogo é **informativo**: pode mudar entre a consulta e o pedido. A decisão vale somente dentro da transação de reserva, com a saída bloqueada.
 
-**Fora do escopo** ([PRD](PRD.md) §3.3): autenticação, pagamento, cancelamento, painel web, cache, filas, microsserviços, deploy e dados reais.
+**Fora do escopo da entrega acadêmica** ([PRD](PRD.md) §3.3): autenticação, pagamento, cancelamento, painel web, cache, filas, microsserviços, hospedagem obrigatória e dados reais.
 
 ## 2. Arquitetura e stack
 
@@ -194,6 +194,25 @@ docker compose --profile test stop api db db-test   # ou: docker compose down
 ```
 
 **Nunca use `docker compose down -v`**: o comando apaga os volumes do projeto, inclusive o banco de desenvolvimento (`tourflow_pgdata`).
+
+### Demonstração pública no Render
+
+**URL:** <https://tourflow-api.onrender.com>
+
+Demonstração complementar **destinada a consultas**. A API roda em Docker no Render, ligada a um PostgreSQL gerenciado com o catálogo fictício da seed. O ambiente de avaliação do fluxo completo é o Docker Compose local.
+
+Abra os links abaixo no navegador. As respostas aparecem em JSON.
+
+| Endpoint | Link | Resultado esperado |
+| --- | --- | --- |
+| `GET /health` | [/health](https://tourflow-api.onrender.com/health) | `200` `{"status":"ok","database":"up"}` |
+| `GET /experiences` | [/experiences](https://tourflow-api.onrender.com/experiences) | `200` com 2 experiências fictícias: "Passeio de barco fictício pela baía" e "Trilha fictícia ao mirante" |
+| `GET /departures` | [/departures](https://tourflow-api.onrender.com/departures) | `200` com 4 saídas fictícias, cada uma com `capacity` e `availableSeats` |
+
+**Verificação HTTP em 11/11/2026:** as três rotas responderam `200`. `/health` devolveu `{"status":"ok","database":"up"}`, `/experiences` retornou os dois nomes com os acentos corretos e `/departures` retornou quatro saídas com as vagas disponíveis iguais à capacidade. A verificação cobriu as rotas de consulta.
+
+- Use a URL pública para consultar o catálogo e a saúde. Para testar o fluxo completo de reservas, incluindo o `409 NO_AVAILABILITY` por falta de vagas, siga o guia rápido acima e a [demonstração de ponta a ponta](#4-demonstração-de-ponta-a-ponta) no Docker Compose.
+- As datas das saídas (`startsAt`) dependem do dia em que a seed rodou no Render.
 
 ## 4. Demonstração de ponta a ponta
 
@@ -551,16 +570,17 @@ Critérios e pesos oficiais conforme o [PRD](PRD.md) §8. **Ressalva registrada:
 | Projeto | TourFlow API — Projeto Final Full Cycle, **nível B** |
 | Autor | Paulo Odilon Everton Rodrigues ([@podilon](https://github.com/podilon)) — [CONTRIBUTORS.md](CONTRIBUTORS.md) |
 | Repositório | <https://github.com/podilon/tourflow-api> (público) |
-| Versão validada em `main` | [`f0237c8bb653cc1262bbd97b86d4f10d981b42d7`](https://github.com/podilon/tourflow-api/tree/f0237c8bb653cc1262bbd97b86d4f10d981b42d7), merge do [PR #12](https://github.com/podilon/tourflow-api/pull/12) |
-| CI que comprova esse SHA | [Run 43059539492](https://github.com/podilon/tourflow-api/actions/runs/43059539492): push em `main`, `success`, `headSha` igual ao merge |
+| Versão de referência para o Moodle | [`ca4683197473a5f01ac7fe334de7fa20e6532010`](https://github.com/podilon/tourflow-api/tree/ca4683197473a5f01ac7fe334de7fa20e6532010), merge do [PR #14](https://github.com/podilon/tourflow-api/pull/14) |
+| CI da versão de referência | [Run 43069740605](https://github.com/podilon/tourflow-api/actions/runs/43069740605), push em `main` concluído com sucesso nesse SHA |
+| Demonstração complementar | [Consultas de catálogo e saúde no Render](#demonstração-pública-no-render) |
 | Uso de IA | [docs/ia.md](docs/ia.md); a IA é ferramenta, sob aprovação humana por tarefa |
 
-Se uma revisão posterior for promovida para `main`, o SHA e o run correspondentes passam a ser registrados em [docs/estado-execucao.md](docs/estado-execucao.md).
+O badge de cobertura no topo aponta para a medição histórica identificada pelo SHA `f0237c8`. A evidência de CI para o Moodle é o run associado à versão de referência da tabela.
 
 ### 8.4 Limitações conhecidas
 
-- API de demonstração **sem autenticação**: publicada só em `127.0.0.1`, não deve ser exposta.
-- Sem cancelamento de reserva, pagamento, cache, filas ou deploy.
+- A API não tem autenticação. Execute os testes de gravação de reservas no ambiente local. O roteiro público do Render cobre apenas as rotas de consulta.
+- Cancelamento de reserva, pagamento, cache e filas estão fora do escopo.
 - Métrica por processo, sem persistência; logs apenas no stdout do container.
 - SLO e p95 medidos numa única execução local de 30 s com 1 VU: não é teste de carga nem SLO de produção.
 - Logs: o handler padrão do Express pode imprimir o stack no stderr quando um erro ocorre depois que a resposta começou a ser enviada (`error-handler.ts` repassa o erro com `next(err)` quando `res.headersSent`). `src/infra/db/pool.ts` escreve uma linha de texto, não JSON, quando um cliente ocioso falha. Uma requisição abortada antes do `finish` não gera linha de log.

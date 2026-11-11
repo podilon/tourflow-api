@@ -1,7 +1,50 @@
 # ROADMAP — TourFlow API | Projeto Final Full Cycle B
 
-> Versão: 1.1 | Data: 2026-11-08 | Estado: **G0 aprovado; F1-T0 pendente de autorização; sem execução de código**
+> Versão: 1.2 | Atualização: 11/11/2026 | Estado: **F0 a F4 concluídas; F5 em andamento (promoção validada; revisão documental e Moodle pendentes)**
 > Entrega oficial: **sexta-feira, 13/11/2026, pelo Moodle**. Apresentação opcional: **16/11/2026**.
+
+## Situação em 11/11/2026
+
+### Trajetória
+
+```text
+08/11  F0  PRD, ADR, governança e roadmap ──► Gate G0
+08/11  F1-T0 permissões
+11/11  F1  Docker-first, PostgreSQL, catálogo e reservas ──► PRs #1, #6, #7, #8
+11/11  F2  unitários, integração, cobertura e CI ──────────► PRs #8, #9
+11/11  F3  logs, métrica, SLO, OpenAPI, ADR v1.2 ──────────► PR #10
+11/11  F4  k6, desempenho, segurança, clone limpo ─────────► PR #11 (develop cfb2d9d)
+11/11  F5  promoção develop → main ───────────────────────► PR #12 (main f0237c8)
+11/11  F5  revisão documental ─────────────────────────────► próximo PR (pendente)
+até 13/11  F5-T3 submissão no Moodle (pendente)
+16/11  F6  apresentação (opcional)
+```
+
+| Fase | Status | Entrega ou próximo passo | Evidência |
+| --- | --- | --- | --- |
+| F0 — Planejamento | Concluída | Escopo, arquitetura e governança aprovados no G0 em 08/11. | Commits `2f6bd56`, `d9b59b3` |
+| F1 — Fundação e API | Concluída | Permissões, Docker, PostgreSQL, catálogo e reservas com controle de capacidade. | Commit `1b8bd05`; [PR #1](https://github.com/podilon/tourflow-api/pull/1), [#6](https://github.com/podilon/tourflow-api/pull/6), [#7](https://github.com/podilon/tourflow-api/pull/7), [#8](https://github.com/podilon/tourflow-api/pull/8) |
+| F2 — Testes e CI | Concluída | Testes unitários e de integração, cobertura e CI obrigatório. | [PR #8](https://github.com/podilon/tourflow-api/pull/8), [#9](https://github.com/podilon/tourflow-api/pull/9) · [CI 43037580198](https://github.com/podilon/tourflow-api/actions/runs/43037580198) |
+| F3 — Observabilidade e contrato | Concluída | Logs JSON, métricas, SLO documentado e OpenAPI. | [PR #10](https://github.com/podilon/tourflow-api/pull/10) · [CI 43048277947](https://github.com/podilon/tourflow-api/actions/runs/43048277947) |
+| F4 — Desempenho e homologação | Concluída | Clone limpo e evidências mesclados em `develop` no SHA `cfb2d9d`. | [PR #11](https://github.com/podilon/tourflow-api/pull/11) · [CI em develop](https://github.com/podilon/tourflow-api/actions/runs/43057766477) |
+| F5 — Congelamento e entrega | Em andamento | F5-T1 e F5-T2 concluídas para a versão `f0237c8`. Revisão documental preparada localmente, aguardando autorização para publicar e promover. F5-T3 (Moodle) pendente. | [PR #12](https://github.com/podilon/tourflow-api/pull/12) · [CI de push em main 43059539492](https://github.com/podilon/tourflow-api/actions/runs/43059539492) |
+| F6 — Apresentação | Opcional | Apresentação em 16/11. Se a entrega incluir vídeo, o prazo é 13/11. | — |
+
+### Marcos da F5
+
+| Marco | Estado | Registro |
+| --- | --- | --- |
+| Promoção de `develop` (`cfb2d9d04602c3feb997f86ebd4481f94ca2d1cf`) para `main` | Concluída em 11/11, 16:33 UTC | [PR #12](https://github.com/podilon/tourflow-api/pull/12), merge `f0237c8bb653cc1262bbd97b86d4f10d981b42d7` |
+| F5-T2 — CI de push verde no SHA promovido | Concluída | [Run 43059539492](https://github.com/podilon/tourflow-api/actions/runs/43059539492), `headSha` `f0237c8…`, `success` |
+| Revisão documental de entrega | Preparada localmente; aguarda autorização | Diff em `README.md`, `ROADMAP.md`, `CONTRIBUTORS.md`, ADR, `docs/desempenho.md`, `docs/ia.md` e `docs/estado-execucao.md` |
+| F5-T3 — Submissão no Moodle | Pendente | Confirmação do envio a registrar em `docs/estado-execucao.md` |
+
+### Etapas restantes da F5
+
+1. **Revisão documental.** Com autorização, publicar a branch documental por PR para `develop`, conferir o check obrigatório `Foundation` no SHA do PR e mesclar.
+2. **Nova promoção.** Abrir o PR de `develop` para `main` no SHA documental aprovado e mesclar com `--match-head-commit`. A aprovação anterior estava vinculada a `cfb2d9d` e não cobre o novo SHA.
+3. **F5-T2 da versão documental.** Registrar o SHA resultante em `main` e a URL do CI de push verde nesse mesmo SHA.
+4. **F5-T3.** Submeter no Moodle até 13/11/2026 com o link do repositório, o README, o link do CI verde, `docs/desempenho.md` e `CONTRIBUTORS.md`, e registrar a confirmação do envio. A F5-T3 só é marcada como concluída após essa confirmação.
 
 ## 1. Política de execução
 
@@ -148,3 +191,4 @@ Pare e solicite aprovação explícita para executar F1-T0.
 | --- | --- | --- | --- |
 | 1.0 | 2026-11-08 | F0-T4 | Versão inicial do roadmap. |
 | 1.1 | 2026-11-08 | F0-T5 | F0-T5 e G0 sobre os documentos v1.1; nova F1-T0 com três níveis de evidência de permissões (sintaxe, testes seguros, bloqueio comprovado); F1-T1 Docker-first com bootstrap do lockfile em container temporário e atualização de dependências apenas por procedimento explícito e autorizado, sem instalação no startup; responsabilidade pelos artefatos Docker; F1-T2 com `db`, `db-test` (profile `test`, `--wait`) e seed idempotente; rollback não destrutivo por fase; tabelas com objetivo, arquivos, comandos, critérios, dependência e gate; CI em `ubuntu-latest` via Docker Compose; thresholds separados de p95 e SLO; matriz com nomes oficiais da rubrica e ambiguidade do CI; prompt de entrada voltado à F1-T0; evidências SOLID na F3-T4 e campos obrigatórios de log na F3-T1. |
+| 1.2 | 2026-11-11 | F5 | Seção "Situação em 11/11/2026" com trajetória, status real e evidência por fase, marcos da F5 (PR #12, merge `f0237c8`, CI 43059539492) e etapas restantes da revisão documental, da nova promoção e do Moodle. Plano original das fases (§1 a §6) preservado. |

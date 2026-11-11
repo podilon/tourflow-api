@@ -2,7 +2,7 @@
 
 API REST de reservas turísticas com prevenção de sobre-reserva. Escopo, critérios de aceite e arquitetura: [PRD](PRD.md), [ADR-0001](docs/adr/0001-arquitetura.md) e [ROADMAP](ROADMAP.md).
 
-> **Estado atual: Bloco 3 (F3-T1 a F3-T4), validado localmente.** A API sobe com o PostgreSQL 17, aplica o schema e o catálogo fictício por comandos explícitos, informa a saúde do banco em `/health`, lista experiências e saídas, cria reservas com bloqueio transacional (`POST /reservations`) e as consulta (`GET /reservations/:id`). Cada requisição gera uma linha de log JSON (Pino) com request ID, e `GET /metrics` expõe `tourflow_reservations_confirmed_total`. O contrato de reservas está em [docs/openapi.yaml](docs/openapi.yaml) (OpenAPI 3.1). O CI executa lint, typecheck, unitários com cobertura mínima de 80% (linhas e branches), integração com PostgreSQL isolado (`db-test`) e build. A medição do SLO e o smoke k6 pertencem ao Bloco 4.
+> **Estado atual: Bloco 4 (F4-T1 a F4-T4), validado localmente; ensaio em clone limpo (F4-T5) pendente.** O smoke k6 mediu p95 de 1,913 ms e o SLO educacional foi **ATINGIDO** (100% de 572 amostras): ver [docs/desempenho.md](docs/desempenho.md). A API sobe com o PostgreSQL 17, aplica o schema e o catálogo fictício por comandos explícitos, informa a saúde do banco em `/health`, lista experiências e saídas, cria reservas com bloqueio transacional (`POST /reservations`) e as consulta (`GET /reservations/:id`). Cada requisição gera uma linha de log JSON (Pino) com request ID, e `GET /metrics` expõe `tourflow_reservations_confirmed_total`. O contrato de reservas está em [docs/openapi.yaml](docs/openapi.yaml) (OpenAPI 3.1). O CI executa lint, typecheck, unitários com cobertura mínima de 80% (linhas e branches), integração com PostgreSQL isolado (`db-test`) e build. O smoke k6 roda em container (profile `perf`).
 
 ## Pré-requisitos
 
@@ -19,6 +19,20 @@ docker compose ps
 ```
 
 A porta da API é publicada apenas em `127.0.0.1:3000`. O PostgreSQL (`db`) não publica porta no host; seus dados ficam no volume `tourflow_pgdata`.
+
+### Ambiente paralelo isolado (opcional)
+
+O projeto Compose, a porta da API no host, os volumes e a tag das imagens locais são parametrizados. Os padrões valem quando nada é definido: projeto `tourflow`, porta `3000`, volumes `tourflow_pgdata` e `tourflow_dev_node_modules`, imagens `tourflow-api:local` e `tourflow-dev:local`. Para rodar uma segunda cópia (por exemplo, um clone limpo) sem tocar no ambiente atual, defina no `.env` da cópia:
+
+```dotenv
+COMPOSE_PROJECT_NAME=tourflow_clean
+TOURFLOW_API_PORT=3100
+TOURFLOW_PGDATA_VOLUME=tourflow_clean_pgdata
+TOURFLOW_NODE_MODULES_VOLUME=tourflow_clean_dev_node_modules
+TOURFLOW_IMAGE_TAG=clean
+```
+
+Os comandos deste README continuam os mesmos; nos exemplos com `curl.exe`, troque a porta `3000` pela definida. Antes de subir os serviços, confira a configuração efetiva com `docker compose config` (nome do projeto, porta publicada em `127.0.0.1`, volumes e tags).
 
 ## Migrations e seed
 
@@ -137,7 +151,20 @@ docker compose exec -T api node -e "fetch('http://127.0.0.1:3000/metrics').then(
 | Janela | Uma execução k6 local (ambiente Docker Compose desta máquina). |
 | Limitações | Meta educacional, local, sem tráfego real; não é um SLO de produção. O p95 do smoke é medido separadamente, com threshold próprio. |
 
-**Ainda não medido.** A medição com k6 e o registro em `docs/desempenho.md` pertencem ao Bloco 4.
+**Medição oficial (2026-11-11):** 572 amostras, `slo_departures_ok` = 100,00% → **ATINGIDO**. Detalhes, ambiente e limites em [docs/desempenho.md](docs/desempenho.md).
+
+## Smoke k6 (desempenho)
+
+Com `api` e `db` no ar (seção "Subir a API e o banco", com migrations e seed aplicadas):
+
+```bash
+docker compose --profile perf run --rm --no-deps k6 run smoke.js
+```
+
+- Serviço `k6` (profile `perf`): imagem `grafana/k6:1.0.0` fixada por digest do índice, script em [`performance/smoke.js`](performance/smoke.js) montado somente leitura em `/scripts`, resultado gravado em `performance/results/smoke-summary.json`. Ele acessa `http://api:3000` pela rede interna e não publica porta.
+- Cenário: 1 VU por 30 s em `GET /departures`, com intervalo de 50 ms. São dois thresholds avaliados separadamente: `p(95)<500` (smoke) e `slo_departures_ok rate>=0.99` (SLO, sucesso só com HTTP 200 abaixo de 500 ms). O SLO é classificado como inconclusivo abaixo de 200 amostras.
+- Somente leitura: não cria reservas. Um threshold reprovado faz o k6 terminar com código 99; isso é resultado da medição e deve ser registrado, não contornado.
+- Resultado oficial: p95 de **1,913 ms** e SLO **ATINGIDO** (572/572), com código de saída 0 ([docs/desempenho.md](docs/desempenho.md)). Executar de novo sobrescreve o `smoke-summary.json` local; a evidência oficial é a versionada no Git.
 
 ## Banco de teste isolado e testes de integração
 
@@ -223,8 +250,21 @@ O padrão adotado é o **Repository Pattern** ([ADR-0001](docs/adr/0001-arquitet
 - API de demonstração **sem autenticação**: publicada só em `127.0.0.1`, não deve ser exposta.
 - Sem cancelamento de reserva, pagamento, cache, filas ou deploy.
 - Métrica por processo, sem persistência; logs apenas no stdout do container.
-- SLO e p95 ainda não medidos (Bloco 4).
+- SLO e p95 medidos numa única execução local de 30 s com 1 VU: não é teste de carga nem SLO de produção ([docs/desempenho.md](docs/desempenho.md)).
+- Logs: o handler padrão do Express pode imprimir o stack no stderr quando um erro ocorre depois que a resposta já começou a ser enviada (`error-handler.ts` repassa o erro com `next(err)` quando `res.headersSent`); `src/infra/db/pool.ts` escreve uma linha de texto, não JSON, quando um cliente ocioso falha; uma requisição abortada pelo cliente antes do `finish` não gera linha de log.
 - `prom-client` 15.1.3 é marcado como *deprecated* no npm em favor de `@prometheus-io/client`; a troca exige nova aprovação de dependência.
+
+## Rastreabilidade com a rubrica do Projeto B
+
+| Critério (peso) | O que é pedido | Evidência no repositório |
+| --- | --- | --- |
+| M1 — Funciona, código e design (35) | API E2E, Compose com um comando, SOLID, Repository Pattern + ADR | `docker-compose.yml` e `Dockerfile` (seções "Subir a API e o banco" e "Fluxo de ponta a ponta"); `src/`; tabela SOLID e seção "Design" acima; [ADR-0001](docs/adr/0001-arquitetura.md) |
+| M2 — Testes e CI verde (20) | Unitários do domínio, 1+ integração, cobertura com limiar, workflow verde | `tests/unit/` (122 testes), `tests/integration/reservations.test.ts` (10 testes no `db-test`, incluindo concorrência); `vitest.config.ts` com 80% de linhas e branches (medido: 100%); `.github/workflows/ci.yml` (check `Foundation (Compose lint, typecheck, test, build)`, `ubuntu-latest`); URLs dos runs verdes em [docs/estado-execucao.md](docs/estado-execucao.md) |
+| M3 — Ambientes, segredos e observabilidade (15) | CI verde, `.env.example`, `.gitignore`, logs Pino, métrica e SLO | [`.env.example`](.env.example) só com placeholders; `.gitignore` com `.env`; seção "Observabilidade" (logs JSON, `/metrics`, SLO) |
+| M4 — Arquitetura, documentação e desempenho (30) | README com nível na primeira linha, ADR, OpenAPI, smoke k6, relatório com p95 medido | Primeira linha deste README; [ADR-0001](docs/adr/0001-arquitetura.md); [docs/openapi.yaml](docs/openapi.yaml); [performance/smoke.js](performance/smoke.js); [docs/desempenho.md](docs/desempenho.md) (p95 1,913 ms; SLO ATINGIDO) |
+| Entrega e uso de IA | `CONTRIBUTORS.md`, prompts relevantes | [CONTRIBUTORS.md](CONTRIBUTORS.md); [docs/ia.md](docs/ia.md) |
+
+Evidência local e evidência do CI hospedado ficam separadas: o k6 e o ensaio em clone limpo rodam localmente; o CI hospedado executa lint, typecheck, cobertura, integração e build.
 
 ## Observações para Windows
 

@@ -7,7 +7,11 @@ on:
   push:
     branches:
       - main
-      - feat/f1-t1-docker-foundation
+  # Runner hospedado (ubuntu-latest) e GITHUB_TOKEN somente leitura; pull_request
+  # (não pull_request_target) não expõe segredos a PRs de forks.
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read

@@ -166,3 +166,29 @@ históricas da F1-T0.
   valida a branch ou o SHA por conta própria e não substitui as proteções do
   GitHub. O carregamento e a correspondência no Claude Code devem ser
   confirmados na nova sessão. Não use bypass se uma regra não corresponder.
+
+## 12. Higienização após merge (2026-11-11)
+
+O responsável delegou a limpeza de branches ao Claude Code. Publique a
+política por PR separado, a partir de `origin/main`, com CI em
+`ubuntu-latest`. A tarefa de produto seguinte continua com aprovação própria.
+
+Após o GitHub confirmar o merge, confira repositório, árvore limpa e
+worktrees. Atualize as referências e a `main` local apenas por fast-forward.
+Antes de excluir, confirme que o último commit de cada branch local e remota
+que ainda existir está contido em `origin/main`. Se uma ponta divergir,
+preserve a branch e reporte. Use `git branch -d` para exclusão local e
+restrinja a exclusão remota a branches enumeradas na política.
+
+O GitHub pode excluir automaticamente a branch de origem após merge pela
+opção `delete_branch_on_merge`. Essa opção está autorizada neste repositório.
+Se uma branch remota já não existir, trate a etapa remota como concluída.
+Depois de limpar, confira as referências remotas, o status e o HEAD local.
+Nunca force a exclusão de uma branch local.
+
+O bootstrap permite limpar `feat/f1-t1-docker-foundation` e
+`chore/f1-t0-permissions` a partir da branch de manutenção. A branch de
+manutenção só pode ser limpa após seu próprio merge. Para outras tarefas,
+inclua a branch específica ao aprovar os comandos de publicação e limpeza.
+O CI continua assíncrono: se estiver pendente, registre o PR e encerre a
+sessão. Retome após a conclusão do CI para verificar o merge e limpar.

@@ -2,9 +2,24 @@ import { inspect } from 'node:util';
 import express from 'express';
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createApp } from '../../src/app.js';
-import { loadEnv } from '../../src/config/env.js';
+import { createApp as buildApp } from '../../src/app.js';
+import { loadDbConfig, loadEnv } from '../../src/config/env.js';
 import { errorHandler } from '../../src/http/middlewares/error-handler.js';
+
+/** Aplicação com dependências fake: estes testes não acessam banco. */
+const createApp = () =>
+  buildApp({
+    checkDatabase: async () => undefined,
+    catalogService: { listExperiences: async () => [], listDepartures: async () => [] },
+    reservationService: {
+      create: async () => {
+        throw new Error('not used');
+      },
+      get: async () => {
+        throw new Error('not used');
+      },
+    },
+  });
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -23,6 +38,13 @@ describe('createApp', () => {
 
   it('aplica o mesmo contrato 404 a outros métodos HTTP', async () => {
     const response = await request(createApp()).delete('/reservations/qualquer');
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it('não registra rotas de reserva além de POST e GET', async () => {
+    const response = await request(createApp()).put('/reservations');
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe('NOT_FOUND');
@@ -74,9 +96,17 @@ describe('createApp', () => {
 });
 
 describe('errorHandler', () => {
+  const errorCodes: string[] = [];
+
   it('responde 500 INTERNAL_ERROR sem mensagem interna nem stack trace', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const app = express();
+    app.use((_req, res, next) => {
+      res.on('finish', () => {
+        errorCodes.push(res.locals.errorCode as string);
+      });
+      next();
+    });
     app.get('/falha', () => {
       throw new Error('detalhe-interno-secreto');
     });
@@ -90,8 +120,9 @@ describe('errorHandler', () => {
     });
     expect(response.text).not.toContain('detalhe-interno-secreto');
     expect(response.text).not.toContain('at ');
-    expect(consoleError).toHaveBeenCalledOnce();
-    expect(consoleError).toHaveBeenCalledWith('Unexpected error while handling request');
+    // O código vai ao log de requisição (F3-T1); o objeto de erro não é escrito.
+    await vi.waitFor(() => expect(errorCodes).toEqual(['INTERNAL_ERROR']));
+    expect(consoleError).not.toHaveBeenCalled();
     // inspect (e não JSON.stringify) serializa Error com mensagem e stack.
     expect(inspect(consoleError.mock.calls)).not.toContain('detalhe-interno-secreto');
   });
@@ -116,4 +147,40 @@ describe('loadEnv', () => {
     );
     expect(() => loadEnv({ PORT: '70000', NODE_ENV: 'staging' })).toThrow(/NODE_ENV/);
   });
+});
+
+describe('loadDbConfig', () => {
+  const valid = {
+    DB_HOST: 'db',
+    DB_PORT: '5432',
+    DB_NAME: 'tourflow',
+    DB_USER: 'tourflow',
+    DB_PASSWORD: 'senha-ficticia',
+  };
+
+  it('converte as variáveis discretas em parâmetros de conexão', () => {
+    expect(loadDbConfig(valid)).toEqual({
+      host: 'db',
+      port: 5432,
+      database: 'tourflow',
+      user: 'tourflow',
+      password: 'senha-ficticia',
+    });
+  });
+
+  it('falha citando apenas os nomes ausentes, sem ecoar a senha', () => {
+    const attempt = () => loadDbConfig({ ...valid, DB_HOST: '', DB_PORT: 'x' });
+
+    expect(attempt).toThrow('Invalid environment configuration: DB_HOST, DB_PORT');
+    expect(() => loadDbConfig({ DB_PASSWORD: 'senha-ficticia' })).not.toThrow(/senha-ficticia/);
+  });
+
+  it.each(['PGOPTIONS', 'PGHOST', 'PGSSLMODE', 'pgdatabase', 'DATABASE_URL'])(
+    'rejeita a variável de redirecionamento %s',
+    (name) => {
+      expect(() => loadDbConfig({ ...valid, [name]: 'qualquer' })).toThrow(
+        `Unsupported connection override variables: ${name}`,
+      );
+    },
+  );
 });

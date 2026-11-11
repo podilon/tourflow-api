@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import { sendError } from '../send-error.js';
 
 /**
  * Rejeições do parser JSON (body-parser) causadas pela requisição do cliente,
@@ -33,12 +34,11 @@ export function errorHandler(err: unknown, _req: Request, res: Response, next: N
 
   const clientMessage = clientBodyErrorMessage(err);
   if (clientMessage !== undefined) {
-    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: clientMessage } });
+    sendError(res, 400, 'VALIDATION_ERROR', clientMessage);
     return;
   }
 
-  // Mensagem fixa, sem o objeto de erro (que pode conter dados internos).
-  // Logs estruturados com Pino chegam na F3-T1.
-  console.error('Unexpected error while handling request');
-  res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
+  // O objeto de erro (mensagem, stack, SQL) não é logado nem respondido: o
+  // log de requisição registra apenas errorCode INTERNAL_ERROR.
+  sendError(res, 500, 'INTERNAL_ERROR', 'Internal server error');
 }

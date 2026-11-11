@@ -1,0 +1,41 @@
+{
+  "generatedAt": "2026-11-11T15:57:42.398Z",
+  "scenario": {
+    "executor": "constant-vus",
+    "vus": 1,
+    "duration": "30s",
+    "endpoint": "GET /departures",
+    "pacingSeconds": 0.05
+  },
+  "requests": {
+    "total": 572,
+    "ratePerSecond": 19.062975893435425,
+    "failedRate": 0
+  },
+  "checks": {
+    "passes": 572,
+    "fails": 0
+  },
+  "latencyMs": {
+    "avg": 1.5224757132867117,
+    "med": 1.4469105,
+    "p90": 1.7724532999999998,
+    "p95": 1.9130067499999994,
+    "max": 13.565077
+  },
+  "p95Threshold": {
+    "expression": "p(95)<500",
+    "ok": true
+  },
+  "slo": {
+    "sli": "GET /departures com HTTP 200 e duração < 500 ms",
+    "target": 0.99,
+    "minSamples": 200,
+    "samples": 572,
+    "successes": 572,
+    "failures": 0,
+    "rate": 1,
+    "thresholdOk": true,
+    "classification": "ATINGIDO"
+  }
+}

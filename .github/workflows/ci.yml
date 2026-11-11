@@ -1,6 +1,7 @@
-# CI da fundação (F1-T1): valida o Compose e executa lint, typecheck, testes
-# e build dentro dos containers. Node.js e npm não rodam no host do runner.
-# PostgreSQL, cobertura e k6 entram nas tarefas correspondentes do ROADMAP.
+# CI: valida o Compose e executa lint, typecheck, testes unitários com
+# cobertura, integração com PostgreSQL real e isolado (db-test) e build,
+# tudo dentro dos containers. Node.js e npm não rodam no host do runner.
+# k6 entra na tarefa correspondente do ROADMAP.
 name: CI
 
 on:
@@ -25,11 +26,13 @@ concurrency:
 
 jobs:
   foundation:
+    # Nome exigido pelo check obrigatório das branches permanentes: não alterar.
     name: Foundation (Compose lint, typecheck, test, build)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      # Projeto Compose exclusivo do job (sobrepõe o name: tourflow do arquivo).
+      # Projeto Compose exclusivo do job (sobrepõe o name: tourflow do arquivo),
+      # usado em todas as etapas, inclusive no db-test efêmero da integração.
       CI_PROJECT: tourflow-ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout event SHA
@@ -60,9 +63,22 @@ jobs:
         id: typecheck
         run: docker compose -p "$CI_PROJECT" --profile dev run --rm --no-deps dev npm run typecheck
 
-      - name: Test
+      # Unitários com cobertura v8; falha abaixo de 80% de linhas ou branches
+      # em src/domain e src/services (vitest.config.ts).
+      - name: Test with coverage
         id: test
-        run: docker compose -p "$CI_PROJECT" --profile dev run --rm --no-deps dev npm run test
+        run: docker compose -p "$CI_PROJECT" --profile dev run --rm --no-deps dev npm run test:coverage
+
+      # Banco de teste do próprio job: instância db-test (tmpfs, sem porta
+      # publicada). O banco de desenvolvimento (db) não é iniciado.
+      - name: Start db-test
+        id: db_test
+        run: docker compose -p "$CI_PROJECT" --profile test up -d --wait db-test
+
+      # A suíte confere db-test:5432/tourflow_test antes e depois de conectar.
+      - name: Integration tests
+        id: integration
+        run: docker compose -p "$CI_PROJECT" --profile dev run --rm --no-deps dev npm run test:integration
 
       - name: Build
         id: build
@@ -76,10 +92,12 @@ jobs:
           R_LINT: ${{ steps.lint.outcome }}
           R_TYPECHECK: ${{ steps.typecheck.outcome }}
           R_TEST: ${{ steps.test.outcome }}
+          R_DB_TEST: ${{ steps.db_test.outcome }}
+          R_INTEGRATION: ${{ steps.integration.outcome }}
           R_BUILD: ${{ steps.build.outcome }}
         run: |
           {
-            echo "### TourFlow API — CI da fundação"
+            echo "### TourFlow API — CI"
             echo ""
             echo "Commit: \`${GITHUB_SHA}\` | Projeto Compose: \`${CI_PROJECT}\`"
             echo ""
@@ -89,10 +107,16 @@ jobs:
             echo "| Build dev | ${R_BUILD_DEV} |"
             echo "| Lint | ${R_LINT} |"
             echo "| Typecheck | ${R_TYPECHECK} |"
-            echo "| Test | ${R_TEST} |"
+            echo "| Testes unitários + cobertura (≥ 80% linhas e branches) | ${R_TEST} |"
+            echo "| db-test (tmpfs) | ${R_DB_TEST} |"
+            echo "| Testes de integração (PostgreSQL) | ${R_INTEGRATION} |"
             echo "| Build | ${R_BUILD} |"
+            if [ -f coverage/coverage-summary.json ]; then
+              echo ""
+              echo "Cobertura (src/domain, src/services): linhas $(jq -r '.total.lines.pct' coverage/coverage-summary.json)%, branches $(jq -r '.total.branches.pct' coverage/coverage-summary.json)%"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Stop job containers (volumes preserved)
         if: always()
-        run: docker compose -p "$CI_PROJECT" --profile dev down --remove-orphans
+        run: docker compose -p "$CI_PROJECT" --profile dev --profile test down --remove-orphans

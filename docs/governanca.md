@@ -230,3 +230,133 @@ O push desse SHA para criar a referência é uma exceção pontual de bootstrap.
 - A primeira promoção para `main` parte de `develop`. Confirme as proteções
   de exclusão nas duas branches antes do merge e a presença de `develop`
   depois. Esta configuração não inicia a F1-T2.
+
+## 15. Execução e publicação da F1-T2 (2026-11-11)
+
+O responsável aprovou a F1-T2, incluindo pull do PostgreSQL 17 Alpine,
+instalação de `pg` e `@types/pg` em Docker, migration estrutural e seed
+somente em `db/tourflow` e PR para `develop` com auto-merge.
+
+- A lista Bash libera os comandos planejados no contexto `desktop-linux`
+  e no projeto Compose `tourflow`, as consultas de evidência e o HTTP
+  local em `127.0.0.1:3000/health`. O modo padrão permanece ativo para
+  comandos não enumerados. A política PowerShell não foi ampliada.
+- Os executores de migration e seed devem conferir o host `db`, a porta
+  interna `5432`, o banco `tourflow` e `current_database()` antes de
+  gravar. `db-test` só é iniciado e inspecionado nesta etapa. Preserve
+  volumes e dados. Bancos externos e produção ficam fora do escopo.
+- Git de escrita fica restrito à branch da tarefa e aos caminhos
+  enumerados. Confira o HEAD do PR e o check obrigatório da `develop`
+  antes de pedir auto-merge. O Claude devolve os links e encerra sem
+  polling. Na retomada, verifica o merge, atualiza `develop` por
+  fast-forward e limpa apenas a branch curta.
+- O carregamento das permissões precisa ser confirmado em uma nova
+  sessão. Registre comandos bloqueados e evidências pendentes conforme
+  o resultado observado.
+
+## 16. Execução e publicação da F1-T3 (2026-11-11)
+
+O responsável aprovou consultas de catálogo, até três iterações do Ralph
+Loop e PR para `develop` após validação. A F1-T3 usa o PostgreSQL existente
+em leitura. Novas dependências, migrations, seed e reservas estão fora
+deste escopo.
+
+- Use os comandos Bash enumerados para a branch `feat/f1-t3-catalog-queries`,
+  os checks do Compose e as seis sondas HTTP com timeout no contêiner
+  `api`. Compare contagens e fingerprint com a linha de base medida na
+  F1-T3. A evidência pelo Windows é separada.
+- O Ralph Loop se limita à implementação, correção e validação local.
+  Confira `jq` e `perl` no Bash da sessão. O estado local do plugin é
+  ignorado pelo Git. A conclusão do loop só pode ser emitida com todos
+  os checks locais comprovados.
+- Depois da verificação pelo host, publique para `develop` e solicite
+  auto-merge no HEAD atual do PR. Encerre sem polling e, após o merge,
+  limpe somente a branch curta. Preserve `develop`, `main` e os volumes.
+
+## 17. Reservas e integração no Bloco 1 (2026-11-11)
+
+O responsável aprovou agrupar F1-T4, F1-T5, F2-T1 e F2-T2 em um PR.
+Não há novas dependências ou novo SQL de migration. O CI hospedado
+continua executando os testes unitários neste bloco. Cobertura e
+integração no CI ficam para o próximo bloco.
+
+- Confirme host `db-test`, porta interna `5432`, banco `tourflow_test`
+  e banco efetivo após conectar, antes de aplicar o schema existente
+  ou gravar fixtures. O migrador de desenvolvimento continua restrito
+  a `db/tourflow`. Preserve o volume persistente de desenvolvimento.
+- No E2E local, permita apenas uma reserva fictícia de duas vagas. A
+  sonda positiva verifica o alvo e reutiliza a reserva identificada
+  se ela já existir. Em caso de resultado incerto, confira o banco
+  antes de repetir qualquer POST. Rode a sonda de rejeição só depois
+  de provar o 409 no banco de teste. As 10 vagas restantes devem
+  permanecer intactas.
+- O Ralph Loop tem até três iterações de implementação e validação
+  local. Faça a publicação para `develop` fora do loop, após aceite,
+  com auto-merge no SHA atual e sem polling. Preserve `main` e
+  `develop`. Não inicie o Bloco 2 com esta autorização.
+
+## 18. Cobertura e integração no CI (2026-11-11)
+
+O responsável aprovou o Bloco 2, incluindo somente
+`@vitest/coverage-v8@5.1.0` como nova dependência de desenvolvimento,
+instalada em Docker. O limiar obrigatório é 80% de linhas e 80% de
+branches em `src/domain/**/*.ts` e `src/services/**/*.ts`.
+
+- O CI hospedado preserva o nome
+  `Foundation (Compose lint, typecheck, test, build)`. No mesmo job,
+  execute a cobertura e a suíte real de integração no `db-test`
+  efêmero do projeto Compose do job. Preserve as guardas do alvo de
+  teste, o resumo das verificações e a limpeza com `if: always()`.
+- Feche o PR #8 antes de criar `feat/f2-t3-coverage-ci`. A atualização
+  local de `develop` é exclusivamente por fast-forward. Exclua a
+  branch curta anterior apenas após verificar a exclusão remota e a
+  ancestralidade do seu último commit.
+- O Ralph Loop se limita à validação local, com até três iterações.
+  Publique a branch para `develop` fora do loop, com auto-merge no
+  SHA atual do PR e sem polling. A promoção para `main` e o Bloco 3
+  ficam fora deste escopo.
+
+## 19. Observabilidade, contrato e documentação (2026-11-11)
+
+O responsável aprovou F3-T1 a F3-T4, com `pino` e `prom-client` em
+produção e `@apidevtools/swagger-parser` em desenvolvimento, instalados
+com versões exatas dentro do contêiner `dev`.
+
+- A API gera o request ID e o devolve no cabeçalho. O log de requisição
+  usa o padrão da rota e campos explícitos, sem URL bruta, query, corpo,
+  credenciais ou dados de clientes.
+- A métrica de reservas confirmadas incrementa depois do commit.
+  Comprove o incremento no `db-test`, sem criar reservas no banco de
+  desenvolvimento nesta etapa.
+- Valide o OpenAPI 3.1 e documente o SLO. A medição com k6 pertence ao
+  Bloco 4. Atualize o ADR e a tabela SOLID com evidências atuais.
+- Feche a limpeza do PR #9 e trabalhe em `feat/f3-observability-openapi`,
+  a partir de `develop`. Até três iterações do Ralph Loop para validação
+  local; publicação para `develop` fora do loop e sem polling.
+
+## 20. Smoke k6 e homologação no Bloco 4 (2026-11-11)
+
+O responsável aprovou F4-T1 a F4-T5. A branch
+`feat/f4-k6-homologation` parte de `origin/develop`, após o PR #10.
+Use Paulo Odilon Everton Rodrigues (@podilon) em `CONTRIBUTORS.md`.
+
+- Consulte o manifesto de `grafana/k6:1.0.0`. Valide o digest do
+  índice (`sha256:` e 64 dígitos hexadecimais) e faça pull pela
+  referência completa `tag@digest`. Confirme RepoDigests e versão.
+  Use a mesma referência no Compose e registre o digest e a data.
+- Parametrize projeto, porta no host, volumes e tags das imagens
+  locais, mantendo seus padrões atuais. A API continua na porta 3000
+  dentro da rede. PostgreSQL e k6 ficam sem porta publicada. Preserve
+  os volumes existentes e execute o smoke apenas em leitura.
+- Use até três iterações do Ralph Loop para F4-T1 a F4-T4. Avalie
+  p95 e SLO separadamente, com amostra mínima de 200 para classificar
+  o SLO. Registre falhas, código de saída e todas as medições oficiais.
+  A evidência do clone fica separada do resultado oficial.
+- Publique um único PR para `develop` fora do loop. O Claude Code
+  executa o clone em `.tourflow-f4-clean`, ignorado pelo Git e pelo
+  contexto Docker, com projeto Compose, porta no
+  host, volumes e tags de imagens isolados. Confira a configuração
+  efetiva antes de subir os serviços. Registre o ensaio, faça push e
+  confira o SHA final, o destino e o CI obrigatório aprovado no mesmo
+  SHA. Solicite auto-merge com `--match-head-commit`, sem polling.
+  A promoção para `main` e a entrega no Moodle ficam para F5.

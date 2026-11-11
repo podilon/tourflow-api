@@ -76,6 +76,51 @@ para o PR `chore/moodle-develop-ci`, conforme `docs/governanca.md` §13.
 na base, o SHA atual e as proteções antes de solicitar auto-merge. Entregue os
 links e encerre se o CI estiver pendente. Consulte `docs/governanca.md` §14.
 
+**F1-T2 autorizada:** o responsável aprovou o pull do PostgreSQL 17 Alpine,
+`pg` e `@types/pg` em Docker, migration e seed somente em `db/tourflow`,
+validação local e publicação da branch `feat/f1-t2-postgresql-foundation`
+por PR para `develop` com auto-merge após o CI verde. Os comandos Bash
+enumerados em `.claude/settings.json` são a exceção de execução para essa
+tarefa. A promoção para `main` e outras tarefas não fazem parte da aprovação.
+Consulte `docs/governanca.md` §15.
+
+**F1-T3 autorizada:** o responsável aprovou as consultas de catálogo, a
+validação local com Ralph Loop (até três iterações) e a publicação da
+branch `feat/f1-t3-catalog-queries` por PR para `develop` após validação.
+Use os comandos enumerados em `.claude/settings.json`. Verificação pelo
+host, commit, push, PR e auto-merge ficam fora do loop.
+Consulte `docs/governanca.md` §16.
+
+**Bloco 1 autorizado (F1-T4, F1-T5, F2-T1 e F2-T2):** implemente reservas,
+documente o fluxo e valide os testes unitários e de integração no mesmo PR
+para `develop`. O schema existente e as fixtures de integração só podem
+ser aplicados em `db-test:5432/tourflow_test`. No banco local `db/tourflow`,
+está autorizada uma única reserva fictícia de duas vagas para o E2E.
+Use o Ralph Loop por até três iterações na validação local. Git de escrita,
+PR e auto-merge ficam fora do loop e seguem os comandos enumerados para
+`feat/f1-t4-reservations`. Consulte `docs/governanca.md` §17.
+
+**Bloco 2 autorizado (F2-T3 e F2-T4):** o responsável aprovou
+`@vitest/coverage-v8@5.1.0` como dependência de desenvolvimento em Docker,
+80% de cobertura de linhas e branches e integração no `db-test` do CI.
+Preserve o nome do check obrigatório. Publique `feat/f2-t3-coverage-ci` por
+PR para `develop` após validação local. Ralph Loop tem até três iterações;
+Git de publicação fica fora do loop. Consulte `docs/governanca.md` §18.
+
+**Bloco 4 autorizado (F4-T1 a F4-T5):** execute em Docker na branch
+`feat/f4-k6-homologation`, conforme a seção 20 de `docs/governanca.md`.
+O Ralph Loop tem até três iterações para F4-T1 a F4-T4. Publique em um
+único PR para `develop` fora do loop. O Claude Code executa o clone
+limpo isolado. Solicite auto-merge após registrar esse ensaio e confirmar o
+CI obrigatório no SHA final, sem polling.
+
+**Bloco 3 autorizado (F3-T1 a F3-T4):** implemente logs, métricas, SLO e
+OpenAPI e atualize o ADR e o README. As dependências autorizadas são
+`pino`, `prom-client` e, para desenvolvimento, `@apidevtools/swagger-parser`,
+com versões exatas e instalação em Docker. Use até três iterações do
+Ralph Loop na validação local e publique `feat/f3-observability-openapi`
+para `develop` fora do loop. Consulte `docs/governanca.md` §19.
+
 - Alteração de PRD/ADR/escopo ou mudança de tecnologia.
 - Instalação de dependência nova não prevista na tarefa.
 - Qualquer migration de alteração estrutural, especialmente destrutiva; executar apenas no banco da TourFlow com alvo verificado.

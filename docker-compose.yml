@@ -1,11 +1,21 @@
-name: tourflow
+# Projeto padrão "tourflow". Para um ambiente paralelo e isolado (ex.: ensaio
+# em clone limpo), defina no .env: COMPOSE_PROJECT_NAME, TOURFLOW_API_PORT,
+# TOURFLOW_PGDATA_VOLUME, TOURFLOW_NODE_MODULES_VOLUME e TOURFLOW_IMAGE_TAG.
+# Sem essas variáveis, valem os padrões abaixo (ambiente atual e CI).
+name: ${COMPOSE_PROJECT_NAME:-tourflow}
+
+# Credencial exclusivamente local e fictícia: nenhum banco publica porta no host.
+# Para trocar, defina TOURFLOW_DB_PASSWORD no .env (ignorado pelo Git).
+x-db-image: &db-image
+  # PostgreSQL 17.11 Alpine, fixado por tag exata e digest (verificado em 2026-11-11).
+  image: postgres:17.11-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac
 
 services:
   api:
     build:
       context: .
       target: runtime
-    image: tourflow-api:local
+    image: tourflow-api:${TOURFLOW_IMAGE_TAG:-local}
     env_file:
       - path: .env
         required: false
@@ -13,20 +23,84 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: "3000"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: tourflow
+      DB_USER: tourflow
+      DB_PASSWORD: ${TOURFLOW_DB_PASSWORD:-tourflow_local_only}
     ports:
-      - "127.0.0.1:3000:3000"
+      # Porta interna sempre 3000; no host, somente em 127.0.0.1.
+      - "127.0.0.1:${TOURFLOW_API_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    <<: *db-image
+    environment:
+      POSTGRES_USER: tourflow
+      POSTGRES_DB: tourflow
+      POSTGRES_PASSWORD: ${TOURFLOW_DB_PASSWORD:-tourflow_local_only}
+    volumes:
+      - tourflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "tourflow", "-d", "tourflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # Banco de teste isolado: instância e nome próprios, dados em tmpfs (descartáveis).
+  db-test:
+    <<: *db-image
+    profiles: ["test"]
+    environment:
+      POSTGRES_USER: tourflow
+      POSTGRES_DB: tourflow_test
+      POSTGRES_PASSWORD: ${TOURFLOW_DB_PASSWORD:-tourflow_local_only}
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "tourflow", "-d", "tourflow_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   dev:
     build:
       context: .
       target: dev
-    image: tourflow-dev:local
+    image: tourflow-dev:${TOURFLOW_IMAGE_TAG:-local}
     profiles: ["dev"]
+    # Alvo exclusivo da suíte de integração (conferido em tests/helpers/test-db.ts).
+    environment:
+      TEST_DB_HOST: db-test
+      TEST_DB_PORT: "5432"
+      TEST_DB_NAME: tourflow_test
+      TEST_DB_USER: tourflow
+      TEST_DB_PASSWORD: ${TOURFLOW_DB_PASSWORD:-tourflow_local_only}
     volumes:
       - .:/app
       # Preenchido a partir da imagem na criação; sincronizar após mudar o lockfile (README).
       - tourflow_dev_node_modules:/app/node_modules
 
+  # Smoke k6 (F4-T1): acessa a API pela rede interna do Compose, sem porta publicada.
+  # Requer api no ar: docker compose --profile perf run --rm --no-deps k6 run smoke.js
+  k6:
+    # k6 v1.0.0, fixado por tag exata e digest do índice (verificado em 2026-11-11).
+    image: grafana/k6:1.0.0@sha256:f21270290d702cbf0a7d6ba5d7ed100b63bcb233b558b885ed787547b3488279
+    profiles: ["perf"]
+    working_dir: /scripts
+    environment:
+      BASE_URL: http://api:3000
+      RESULTS_DIR: /results
+    volumes:
+      - ./performance:/scripts:ro
+      - ./performance/results:/results
+
 volumes:
   tourflow_dev_node_modules:
-    name: tourflow_dev_node_modules
+    name: ${TOURFLOW_NODE_MODULES_VOLUME:-tourflow_dev_node_modules}
+  tourflow_pgdata:
+    name: ${TOURFLOW_PGDATA_VOLUME:-tourflow_pgdata}

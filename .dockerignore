@@ -1,5 +1,6 @@
 .git
 .claude
+/.tourflow-f4-clean/
 node_modules
 dist
 coverage

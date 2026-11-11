@@ -11,4 +11,11 @@ export default defineConfig(
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
+  {
+    // Scripts k6 (executados pelo binário k6, não pelo Node.js): globais do runtime k6.
+    files: ['performance/**/*.js'],
+    languageOptions: {
+      globals: { __ENV: 'readonly', __VU: 'readonly', __ITER: 'readonly' },
+    },
+  },
 );

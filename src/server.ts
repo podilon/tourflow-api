@@ -1,8 +1,11 @@
 import { createApp } from './app.js';
-import { loadEnv } from './config/env.js';
+import { loadDbConfig, loadEnv } from './config/env.js';
+import { createDatabaseHealthCheck } from './infra/db/health.js';
+import { createPool } from './infra/db/pool.js';
 
 const env = loadEnv();
-const app = createApp();
+const pool = createPool(loadDbConfig());
+const app = createApp({ checkDatabase: createDatabaseHealthCheck(pool) });
 
 const server = app.listen(env.PORT, env.HOST, (error?: Error) => {
   if (error) {
@@ -14,7 +17,9 @@ const server = app.listen(env.PORT, env.HOST, (error?: Error) => {
 
 function shutdown(signal: NodeJS.Signals): void {
   console.log(`Received ${signal}, closing HTTP server`);
-  server.close(() => process.exit(0));
+  server.close(() => {
+    pool.end().finally(() => process.exit(0));
+  });
 }
 
 process.on('SIGTERM', shutdown);

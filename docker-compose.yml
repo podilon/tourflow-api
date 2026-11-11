@@ -1,5 +1,11 @@
 name: tourflow
 
+# Credencial exclusivamente local e fictícia: nenhum banco publica porta no host.
+# Para trocar, defina TOURFLOW_DB_PASSWORD no .env (ignorado pelo Git).
+x-db-image: &db-image
+  # PostgreSQL 17.11 Alpine, fixado por tag exata e digest (verificado em 2026-11-11).
+  image: postgres:17.11-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac
+
 services:
   api:
     build:
@@ -13,8 +19,48 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: "3000"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: tourflow
+      DB_USER: tourflow
+      DB_PASSWORD: ${TOURFLOW_DB_PASSWORD:-tourflow_local_only}
     ports:
       - "127.0.0.1:3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    <<: *db-image
+    environment:
+      POSTGRES_USER: tourflow
+      POSTGRES_DB: tourflow
+      POSTGRES_PASSWORD: ${TOURFLOW_DB_PASSWORD:-tourflow_local_only}
+    volumes:
+      - tourflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "tourflow", "-d", "tourflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # Banco de teste isolado: instância e nome próprios, dados em tmpfs (descartáveis).
+  db-test:
+    <<: *db-image
+    profiles: ["test"]
+    environment:
+      POSTGRES_USER: tourflow
+      POSTGRES_DB: tourflow_test
+      POSTGRES_PASSWORD: ${TOURFLOW_DB_PASSWORD:-tourflow_local_only}
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "tourflow", "-d", "tourflow_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   dev:
     build:
@@ -30,3 +76,5 @@ services:
 volumes:
   tourflow_dev_node_modules:
     name: tourflow_dev_node_modules
+  tourflow_pgdata:
+    name: tourflow_pgdata

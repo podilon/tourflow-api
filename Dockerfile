@@ -28,6 +28,11 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
+# SQL versionado lido pelos executores de migration e seed (dist/infra/db/*.js).
+COPY db ./db
 USER node
 EXPOSE 3000
+# /health consulta o PostgreSQL; sem curl na imagem, usa o fetch nativo do Node.js.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
 CMD ["node", "dist/server.js"]

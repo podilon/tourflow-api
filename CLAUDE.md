@@ -58,6 +58,12 @@ deste arquivo e do executor para essa entrega. Ver `docs/governanca.md` §11.
 Push direto em `main`, force push, merge administrativo e deploy permanecem
 fora do escopo. O CI desta publicação usa `ubuntu-latest`.
 
+**Higienização pós-merge delegada:** para branches enumeradas na política do
+projeto, o Claude Code pode atualizar a `main` por fast-forward e remover
+branches mescladas conforme as verificações em `docs/governanca.md` §12.
+A publicação dessa política ocorre em `chore/automate-post-merge` e segue
+as proteções do GitHub e o CI hospedado.
+
 - Alteração de PRD/ADR/escopo ou mudança de tecnologia.
 - Instalação de dependência nova não prevista na tarefa.
 - Qualquer migration de alteração estrutural, especialmente destrutiva; executar apenas no banco da TourFlow com alvo verificado.

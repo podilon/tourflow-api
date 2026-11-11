@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import type { CatalogService } from '../../services/catalog-service.js';
+import { sendError } from '../send-error.js';
 
 /**
  * Filtro de GET /departures. Strict: parâmetro desconhecido, repetido (array),
@@ -24,9 +25,7 @@ export function createCatalogController(service: CatalogService): CatalogControl
       const parsed = departuresQuerySchema.safeParse(req.query);
       if (!parsed.success) {
         // Mensagem fixa: a entrada recebida não é ecoada.
-        res
-          .status(400)
-          .json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid query parameters' } });
+        sendError(res, 400, 'VALIDATION_ERROR', 'Invalid query parameters');
         return;
       }
       res.status(200).json(await service.listDepartures(parsed.data));

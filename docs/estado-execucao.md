@@ -24,11 +24,63 @@
 | F1-T2 — PostgreSQL, migrations, seed e saúde | `f4c5db9`; merge `2e1a6e3` em `develop` (PR #6) | Concluída e mesclada; CI `43024218169` verde |
 | F1-T3 — Consultas de catálogo | `c53363f`; merge `59b1517` em `develop` (PR #7) | Concluída e mesclada |
 | Bloco 1 — F1-T4, F1-T5, F2-T1, F2-T2 | `61c6c65`; merge `90e238e` em `develop` (PR #8) | Concluído e mesclado |
+| Bloco 2 — F2-T3, F2-T4 | `d075476`; merge `8c18f24` em `develop` (PR #9) | Concluído e mesclado; CI `43037580198` verde (cobertura e integração) |
 
-## Checkpoint atual — Bloco 2: F2-T3 e F2-T4 (2026-11-11)
+## Checkpoint atual — Bloco 3: F3-T1 a F3-T4 (2026-11-11)
+
+- Tarefas: logs Pino (F3-T1), métrica e SLO documentado (F3-T2), OpenAPI 3.1 (F3-T3), ADR e README com tabela SOLID (F3-T4), num único PR (`docs/governanca.md` §19).
+- Execução: Ralph Loop, iteração 1 de 3. Situação: **validado localmente**. Sem commit; commit, push, PR e auto-merge ficam fora do loop. k6 não executado (Bloco 4).
+
+### Fechamento do PR #9 e branch
+
+- Pré-checagens: `command -v jq` → `/c/ProgramData/chocolatey/bin/jq`; `command -v perl` → `/usr/bin/perl`; `origin` → `https://github.com/podilon/tourflow-api.git`; `git diff --stat` com apenas as três alterações de governança preparadas (`.claude/settings.json` +17, `CLAUDE.md` +7, `docs/governanca.md` +18), preservadas.
+- Permissões: durante a validação dos logs, o comando `docker … logs --tail 20 --no-log-prefix api | jq -ec '…'` não estava na lista allow e foi submetido à confirmação. O responsável humano aprovou e acrescentou duas entradas exatas a `.claude/settings.json` (`docker --context desktop-linux compose -p tourflow logs --tail 20 --no-log-prefix api` e o filtro `jq -ec` correspondente), como parte da estratégia de automação governada. O diff final de `.claude/settings.json` no Bloco 3 é, portanto, de **+19 linhas** (17 preparadas pelo Codex + 2 aprovadas no loop). As regras `ask`/`deny` não foram alteradas, e o Claude Code não editou o arquivo diretamente (`Edit(./.claude/settings.json)` está em `deny`).
+- `git fetch --prune origin` removeu `origin/feat/f2-t3-coverage-ci` e trouxe `develop` `90e238e..8c18f24`. `git ls-remote --heads origin main develop` lista apenas `develop` `8c18f24f7d84…` e `main` `a09b6f06f314…` (branch curta excluída no remoto). `git merge-base --is-ancestor d075476 origin/develop` → exit 0.
+- `develop` local atualizada por `git fetch origin refs/heads/develop:refs/heads/develop` (fast-forward `90e238e..8c18f24`). `git switch -c feat/f3-observability-openapi origin/develop` levou as três alterações; só então `git branch -d feat/f2-t3-coverage-ci` (`was d075476`).
+
+### Dependências (instaladas no contêiner `dev`, versões exatas)
+
+- Produção: `pino` 10.4.0, `prom-client` 15.1.3. Desenvolvimento: `@apidevtools/swagger-parser` 13.1.0. `package.json` e `package-lock.json` gerados pelo npm no contêiner; `--profile dev build dev` e `npm ci` sincronizaram imagem e volume.
+- O npm marca `prom-client` 15.1.3 como *deprecated* (substituto: `@prometheus-io/client`). Mantido por ser a dependência aprovada; a troca exige nova aprovação. O audit de desenvolvimento segue com as 10 ocorrências moderadas já registradas; a imagem `runtime` reporta `found 0 vulnerabilities`.
+
+### Implementação
+
+- `src/infra/logger.ts`: Pino JSON no stdout, `base: null`, horário ISO; logger desligado como padrão do `createApp` nos testes.
+- `src/http/middlewares/request-context.ts`: primeiro middleware; gera `requestId` (UUID v4) na API, ignora o cabeçalho do cliente, devolve `X-Request-Id` e, no `finish`, escreve uma linha com `requestId`, `method`, `route` (padrão da rota ou `unmatched`), `statusCode`, `durationMs` e `errorCode` quando houver. Sem URL, query, corpo, cabeçalhos, dados pessoais ou objeto de erro.
+- `src/http/send-error.ts`: todas as respostas de erro (controllers, `/health`, 404, `errorHandler`, `/metrics`) passam por ele, que grava o código em `res.locals.errorCode`. Contrato HTTP inalterado. O `errorHandler` deixou de escrever no `console.error`: o 500 aparece no log de requisição como `INTERNAL_ERROR`.
+- `src/infra/metrics.ts` e `src/http/routes/metrics.ts`: `Registry` próprio, counter `tourflow_reservations_confirmed_total`, `GET /metrics`. `src/services/reservation-service.ts` recebe `onConfirmed` e o chama depois de `repository.create` resolver (após `COMMIT`); exceção do hook é absorvida. `src/server.ts` compõe logger, métricas e o hook e passou a logar início e encerramento em JSON.
+- `docs/openapi.yaml`: OpenAPI 3.1 com `POST /reservations` e `GET /reservations/{id}`, schemas, cabeçalhos e exemplos fictícios; só referências locais.
+- Testes: `tests/unit/observability.test.ts` (19), `tests/unit/openapi.test.ts` (7), caso 500 de `tests/unit/app.test.ts` ajustado ao novo comportamento, e prova da métrica em `tests/integration/reservations.test.ts` (201 incrementa, 409 não).
+- Documentação: README (estado, OpenAPI, observabilidade, SLO, tabela SOLID, limitações), ADR v1.2.
+
+### Verificações executadas
+
+| Verificação | Resultado |
+| --- | --- |
+| `compose config --quiet` | exit 0 |
+| `run --rm --no-deps dev npm run lint` | exit 0, sem avisos |
+| `run --rm --no-deps dev npm run typecheck` | exit 0 |
+| `run --rm --no-deps dev npm run test:coverage` | exit 0; 122 testes em 7 arquivos; linhas 100% (32/32), branches 100% (9/9), statements 100% (38/38), funções 100% (17/17); limiares de 80% (linhas e branches) inalterados |
+| `--profile test stop db-test` + `up -d --wait db-test` | tmpfs novo; `Healthy` |
+| `run --rm --no-deps dev npm run test:integration` | exit 0; schema aplicado no `db-test`; 10 testes, incluindo a prova da métrica e as duas de concorrência |
+| `run --rm --no-deps dev npm run build` | exit 0 |
+| `up --build -d --wait api` | imagem `runtime` reconstruída; `api` `Healthy` |
+| `exec -T api npm ls --omit=dev --depth=0` | express 5.3.0, pg 8.23.1, pino 10.4.0, prom-client 15.1.3, zod 4.6.7 (sem swagger-parser) |
+| `GET /metrics` (dentro do container `api`) | `200`, `text/plain; version=0.0.4; charset=utf-8`, `tourflow_reservations_confirmed_total 0` |
+| `GET /health` | `200 {"status":"ok","database":"up"}` |
+| `GET /departures?experienceId=abc` | `400 VALIDATION_ERROR` |
+| `compose logs --tail 20 --no-log-prefix api \| jq -ec ...` | todas as linhas parseadas como JSON (exit 0); `/health` 200 sem `errorCode` (`requestId` `95cd8f83-…`) e `/departures` 400 com `errorCode` `VALIDATION_ERROR` (`requestId` `b584dd65-…`), sem query |
+| `psql` em `db/tourflow` (ocupação) | inalterado: somente a reserva E2E do Bloco 1 (`…6b01`, 2 vagas); nenhuma reserva gravada neste bloco |
+| `--profile test stop db-test` | `Stopped` (tmpfs descartado) |
+
+### Estado deixado
+
+- `api` e `db` em execução, sem alteração de dados; `db-test` parado. Volumes preservados.
+
+## Checkpoint anterior — Bloco 2: F2-T3 e F2-T4 (2026-11-11)
 
 - Tarefas: cobertura com limiar (F2-T3) e integração com PostgreSQL no CI (F2-T4), num único PR (`docs/governanca.md` §18).
-- Execução: Ralph Loop, iteração 1 de 3. Situação: **validado localmente**. Sem commit; commit, push, PR e auto-merge ficam fora do loop.
+- Execução: Ralph Loop, iteração 1 de 3. Situação: **concluído e mesclado** (PR #9, merge `8c18f24` em `develop`, CI `43037580198` verde).
 - Pré-checagens: `jq` → `/c/ProgramData/chocolatey/bin/jq`; `perl` → `/usr/bin/perl`; `origin` → `https://github.com/podilon/tourflow-api.git`; árvore com apenas as três alterações de governança preparadas pelo Codex (`.claude/settings.json`, `CLAUDE.md`, `docs/governanca.md` §18; +44 linhas), preservadas.
 - Git: `git fetch --prune origin` removeu `origin/feat/f1-t4-reservations` e trouxe `develop` `59b1517..90e238e`; `ls-remote` confirma `develop` em `90e238e3074c…` e nenhuma branch curta remota; `git merge-base --is-ancestor 61c6c654… origin/develop` → exit 0. `develop` local atualizada por `git fetch origin refs/heads/develop:refs/heads/develop` (fast-forward, `90e238e`). `git switch -c feat/f2-t3-coverage-ci origin/develop` levou as três alterações; só então `git branch -d feat/f1-t4-reservations` (`was 61c6c65`).
 
@@ -328,7 +380,7 @@ F1-T1 aprovada tecnicamente com ressalvas, depois da rodada de correção 1. Evi
 
 ## Próxima ação
 
-Publicação de `feat/f2-t3-coverage-ci` por PR para `develop` com auto-merge no HEAD atual (`docs/governanca.md` §18), fora do Ralph Loop; o primeiro run hospedado comprovará cobertura e integração no CI. A promoção para `main` e o Bloco 3 dependem de aprovação própria.
+Publicação de `feat/f3-observability-openapi` por PR para `develop` com auto-merge no HEAD atual (`docs/governanca.md` §19), fora do Ralph Loop e sem polling. A promoção para `main` e o Bloco 4 (k6, SLO medido, `docs/desempenho.md`) dependem de aprovação própria.
 
 ## Governança
 

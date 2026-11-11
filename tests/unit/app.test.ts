@@ -96,9 +96,17 @@ describe('createApp', () => {
 });
 
 describe('errorHandler', () => {
+  const errorCodes: string[] = [];
+
   it('responde 500 INTERNAL_ERROR sem mensagem interna nem stack trace', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const app = express();
+    app.use((_req, res, next) => {
+      res.on('finish', () => {
+        errorCodes.push(res.locals.errorCode as string);
+      });
+      next();
+    });
     app.get('/falha', () => {
       throw new Error('detalhe-interno-secreto');
     });
@@ -112,8 +120,9 @@ describe('errorHandler', () => {
     });
     expect(response.text).not.toContain('detalhe-interno-secreto');
     expect(response.text).not.toContain('at ');
-    expect(consoleError).toHaveBeenCalledOnce();
-    expect(consoleError).toHaveBeenCalledWith('Unexpected error while handling request');
+    // O código vai ao log de requisição (F3-T1); o objeto de erro não é escrito.
+    await vi.waitFor(() => expect(errorCodes).toEqual(['INTERNAL_ERROR']));
+    expect(consoleError).not.toHaveBeenCalled();
     // inspect (e não JSON.stringify) serializa Error com mensagem e stack.
     expect(inspect(consoleError.mock.calls)).not.toContain('detalhe-interno-secreto');
   });

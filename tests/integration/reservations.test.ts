@@ -5,6 +5,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { createDatabaseHealthCheck } from '../../src/infra/db/health.js';
+import { createMetrics } from '../../src/infra/metrics.js';
 import { createPgCatalogRepository } from '../../src/repositories/pg/pg-catalog-repository.js';
 import { createPgReservationRepository } from '../../src/repositories/pg/pg-reservation-repository.js';
 import { createCatalogService } from '../../src/services/catalog-service.js';
@@ -21,12 +22,25 @@ let app: Express;
 
 beforeAll(async () => {
   pool = await openTestPool();
+  const metrics = createMetrics();
   app = createApp({
     checkDatabase: createDatabaseHealthCheck(pool),
     catalogService: createCatalogService(createPgCatalogRepository(pool)),
-    reservationService: createReservationService(createPgReservationRepository(pool)),
+    reservationService: createReservationService(createPgReservationRepository(pool), {
+      onConfirmed: metrics.recordReservationConfirmed,
+    }),
+    metrics,
   });
 });
+
+/** Valor atual de tourflow_reservations_confirmed_total lido via GET /metrics. */
+async function confirmedTotal(): Promise<number> {
+  const response = await request(app).get('/metrics');
+  expect(response.status).toBe(200);
+  const match = /^tourflow_reservations_confirmed_total (\d+)$/m.exec(response.text);
+  expect(match).not.toBeNull();
+  return Number(match![1]);
+}
 
 afterAll(async () => {
   await pool?.end();
@@ -199,6 +213,25 @@ describe('POST /reservations e GET /reservations/:id', () => {
   it('consulta: 404 para reserva inexistente e 400 para id inválido', async () => {
     expect((await request(app).get(`/reservations/${randomUUID()}`)).status).toBe(404);
     expect((await request(app).get('/reservations/abc')).status).toBe(400);
+  });
+});
+
+describe('métrica tourflow_reservations_confirmed_total no db-test (F3-T2)', () => {
+  it('201 incrementa depois do COMMIT e 409 não incrementa', async () => {
+    const { departureId } = await createDeparture(3, '7 days');
+    const before = await confirmedTotal();
+
+    const created = await postReservation(bodyFor(departureId, 2));
+    expect(created.status).toBe(201);
+    // O incremento corresponde a uma linha já confirmada e visível em outra conexão.
+    expect(await departureState(departureId)).toEqual({ reservedSeats: 2, reservations: 1 });
+    expect(await confirmedTotal()).toBe(before + 1);
+
+    const rejected = await postReservation(bodyFor(departureId, 2));
+    expect(rejected.status).toBe(409);
+    expect(rejected.body.error.code).toBe('NO_AVAILABILITY');
+    expect(await departureState(departureId)).toEqual({ reservedSeats: 2, reservations: 1 });
+    expect(await confirmedTotal()).toBe(before + 1);
   });
 });
 

@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
+import { sendError } from '../send-error.js';
 
 export function notFoundHandler(_req: Request, res: Response): void {
-  res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Resource not found' } });
+  sendError(res, 404, 'NOT_FOUND', 'Resource not found');
 }

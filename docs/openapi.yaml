@@ -1,0 +1,268 @@
+openapi: 3.1.0
+info:
+  title: TourFlow API
+  version: 0.1.0
+  summary: Reservas turísticas de demonstração (Projeto B — Full Cycle).
+  description: |
+    Contrato das rotas de reserva. API educacional, sem autenticação, para uso
+    local (`127.0.0.1`). Todos os exemplos são fictícios. Toda resposta traz o
+    cabeçalho `X-Request-Id`, gerado pela API, que identifica a linha de log
+    correspondente.
+servers:
+  - url: http://127.0.0.1:3000
+    description: Ambiente local (Docker Compose)
+tags:
+  - name: reservations
+    description: Criação e consulta de reservas
+paths:
+  /reservations:
+    post:
+      tags: [reservations]
+      operationId: createReservation
+      summary: Cria uma reserva confirmada
+      description: |
+        Bloqueia a saída (`SELECT ... FOR UPDATE`), verifica se ela é futura e
+        tem vagas para todos os participantes, grava a reserva e ocupa as vagas
+        na mesma transação. Confirmações concorrentes nunca excedem a
+        capacidade. Nome e e-mail são gravados, mas não são devolvidos.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationRequest'
+            examples:
+              valid:
+                summary: Reserva de duas vagas
+                value:
+                  departureId: 3c9e7b52-6a0f-4d8e-8b1c-5f2a9d4e6b01
+                  customerName: Cliente Ficticio
+                  customerEmail: cliente.ficticio@example.test
+                  participants: 2
+      responses:
+        '201':
+          description: Reserva confirmada e persistida.
+          headers:
+            Location:
+              description: Caminho da reserva criada.
+              schema:
+                type: string
+                example: /reservations/5d1f0a3b-9c2e-4f6a-8b7d-1e2f3a4b5c6d
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+              examples:
+                confirmed:
+                  $ref: '#/components/examples/ConfirmedReservation'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          description: Saída inexistente.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                departureNotFound:
+                  value:
+                    error:
+                      code: NOT_FOUND
+                      message: Departure not found
+        '409':
+          description: Saída encerrada ou sem vagas suficientes; nada é gravado.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                noAvailability:
+                  value:
+                    error:
+                      code: NO_AVAILABILITY
+                      message: Not enough available seats
+                departureClosed:
+                  value:
+                    error:
+                      code: DEPARTURE_CLOSED
+                      message: Departure is closed for reservations
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /reservations/{id}:
+    get:
+      tags: [reservations]
+      operationId: getReservation
+      summary: Consulta uma reserva pelo id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID da reserva.
+          schema:
+            type: string
+            format: uuid
+          example: 5d1f0a3b-9c2e-4f6a-8b7d-1e2f3a4b5c6d
+      responses:
+        '200':
+          description: Reserva encontrada.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+              examples:
+                confirmed:
+                  $ref: '#/components/examples/ConfirmedReservation'
+        '400':
+          description: Id fora do formato UUID.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidId:
+                  value:
+                    error:
+                      code: VALIDATION_ERROR
+                      message: Invalid reservation id
+        '404':
+          description: Reserva inexistente.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                reservationNotFound:
+                  value:
+                    error:
+                      code: NOT_FOUND
+                      message: Reservation not found
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  headers:
+    XRequestId:
+      description: Identificador da requisição, gerado pela API (UUID v4).
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    ReservationRequest:
+      type: object
+      additionalProperties: false
+      required: [departureId, customerName, customerEmail, participants]
+      properties:
+        departureId:
+          type: string
+          format: uuid
+        customerName:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Aparado (trim) antes da validação de tamanho.
+        customerEmail:
+          type: string
+          format: email
+          maxLength: 254
+        participants:
+          type: integer
+          minimum: 1
+          maximum: 20
+    Reservation:
+      type: object
+      additionalProperties: false
+      required: [id, departureId, participants, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        departureId:
+          type: string
+          format: uuid
+        participants:
+          type: integer
+          minimum: 1
+          maximum: 20
+        status:
+          type: string
+          enum: [CONFIRMED]
+        createdAt:
+          type: string
+          format: date-time
+          description: ISO 8601 em UTC.
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - NOT_FOUND
+                - DEPARTURE_CLOSED
+                - NO_AVAILABILITY
+                - INTERNAL_ERROR
+            message:
+              type: string
+              description: Mensagem fixa; a entrada recebida não é ecoada.
+  examples:
+    ConfirmedReservation:
+      value:
+        id: 5d1f0a3b-9c2e-4f6a-8b7d-1e2f3a4b5c6d
+        departureId: 3c9e7b52-6a0f-4d8e-8b1c-5f2a9d4e6b01
+        participants: 2
+        status: CONFIRMED
+        createdAt: '2026-11-11T12:00:01.234Z'
+  responses:
+    ValidationError:
+      description: Payload inválido, JSON malformado ou corpo acima de 16 KB.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidPayload:
+              value:
+                error:
+                  code: VALIDATION_ERROR
+                  message: Invalid reservation payload
+    InternalError:
+      description: Falha inesperada; sem detalhes internos nem stack trace.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            internal:
+              value:
+                error:
+                  code: INTERNAL_ERROR
+                  message: Internal server error

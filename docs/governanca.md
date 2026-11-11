@@ -315,3 +315,21 @@ branches em `src/domain/**/*.ts` e `src/services/**/*.ts`.
   Publique a branch para `develop` fora do loop, com auto-merge no
   SHA atual do PR e sem polling. A promoção para `main` e o Bloco 3
   ficam fora deste escopo.
+
+## 19. Observabilidade, contrato e documentação (2026-11-11)
+
+O responsável aprovou F3-T1 a F3-T4, com `pino` e `prom-client` em
+produção e `@apidevtools/swagger-parser` em desenvolvimento, instalados
+com versões exatas dentro do contêiner `dev`.
+
+- A API gera o request ID e o devolve no cabeçalho. O log de requisição
+  usa o padrão da rota e campos explícitos, sem URL bruta, query, corpo,
+  credenciais ou dados de clientes.
+- A métrica de reservas confirmadas incrementa depois do commit.
+  Comprove o incremento no `db-test`, sem criar reservas no banco de
+  desenvolvimento nesta etapa.
+- Valide o OpenAPI 3.1 e documente o SLO. A medição com k6 pertence ao
+  Bloco 4. Atualize o ADR e a tabela SOLID com evidências atuais.
+- Feche a limpeza do PR #9 e trabalhe em `feat/f3-observability-openapi`,
+  a partir de `develop`. Até três iterações do Ralph Loop para validação
+  local; publicação para `develop` fora do loop e sem polling.

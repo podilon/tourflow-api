@@ -21,8 +21,67 @@
 | F1-T0 — Permissões | `1b8bd05` | Concluída, com limitações em `docs/governanca.md` |
 | PREP-AUTO — Skill e checkpoint | `fdbe62d` | Concluída |
 | F1-T1 — Fundação Docker-first e CI | `develop` em `fd74ca4` (PRs #1 a #4) | Concluída e mesclada |
+| F1-T2 — PostgreSQL, migrations, seed e saúde | `f4c5db9`; merge `2e1a6e3` em `develop` (PR #6) | Concluída e mesclada; CI `43024218169` verde |
 
-## Checkpoint atual — F1-T2 (2026-11-11)
+## Checkpoint atual — F1-T3 (2026-11-11)
+
+- Tarefa: F1-T3 — Consultas de catálogo (`GET /experiences`, `GET /departures`).
+- Branch: `feat/f1-t3-catalog-queries`, criada a partir de `origin/develop` em `2e1a6e3`, levando as quatro alterações de governança preparadas pelo Codex (`.claude/settings.json`, `.gitignore`, `CLAUDE.md`, `docs/governanca.md` §16).
+- Execução: Ralph Loop, iteração 1 de 3.
+- Situação: **validada localmente (Ralph Loop) e pelo host (Codex, Windows)**. Publicação por PR para `develop` com auto-merge.
+- Pré-checagens do Bash: `command -v jq` → `/c/ProgramData/chocolatey/bin/jq` (`jq-1.8.1`); `command -v perl` → `/usr/bin/perl`; `origin` → `https://github.com/podilon/tourflow-api.git`; `origin/develop` = `HEAD` = `2e1a6e3d5516…`; árvore com apenas as quatro alterações esperadas (+48 linhas).
+
+### Implementação
+
+- `src/repositories/catalog-repository.ts`: contrato de leitura. `src/repositories/pg/pg-catalog-repository.ts`: SQL estático; o filtro vai sempre em `$1::uuid` (`NULL` = sem filtro). Ordenação estável: experiências por `name, id`; saídas por `starts_at, id`.
+- `src/services/catalog-service.ts`: `startsAt` via `toISOString()` (UTC) e `availableSeats = capacity − reservedSeats`.
+- `src/http/controllers/catalog-controller.ts`: `z.strictObject({ experienceId: z.uuid().optional() })`. Inválido, vazio, repetido (array) ou desconhecido → 400 `VALIDATION_ERROR` com mensagem fixa.
+- `src/http/routes/catalog.ts`, `src/app.ts` (nova dependência `catalogService`) e `src/server.ts` (injeção do repositório PostgreSQL).
+- Nenhuma dependência instalada; nenhuma migration ou seed executada.
+
+### Verificações executadas
+
+| Verificação | Resultado |
+| --- | --- |
+| Linha de base (antes das consultas) | experiences 2, reservations 0, departures 4, futuras 4, fingerprint `4213ee8b99f27b76d0d94eb021c0a2bc`; xmin das 6 linhas `752` |
+| `run --rm --no-deps dev npm run lint` | exit 0, sem avisos |
+| `run --rm --no-deps dev npm run typecheck` | exit 0 |
+| `run --rm --no-deps dev npm run test` | exit 0; 41 testes aprovados em 3 arquivos (16 novos em `catalog.test.ts`) |
+| `run --rm --no-deps dev npm run build` | exit 0 |
+| `up --build -d --wait api` | imagem reconstruída; `tourflow-db-1 Healthy`, `tourflow-api-1 Healthy` |
+| `GET /experiences` (no contêiner `api`) | `200`, 2 experiências ordenadas por nome |
+| `GET /departures` | `200`, 4 saídas por `startsAt` (11-18, 11-21, 11-25, 12-02, 09:00 UTC), `availableSeats` = `capacity` |
+| `GET /departures?experienceId=8f0c…7a01` | `200`, só as 2 saídas do passeio de barco |
+| `GET /departures?experienceId=aaaaaaaa-…` | `200 []` |
+| `GET /departures?experienceId=abc` | `400 {"error":{"code":"VALIDATION_ERROR","message":"Invalid query parameters"}}`, sem eco |
+| `GET /health` | `200 {"status":"ok","database":"up"}` |
+| Contagens, fingerprint e xmin depois das consultas | idênticos à linha de base: 2 / 0 / 4 / 4, `4213ee8b…`, todas as linhas `752` |
+
+As linhas acima foram executadas pelo Claude Code no Ralph Loop: 41 testes via Compose e seis sondas HTTP **dentro do contêiner `api`**.
+
+### Verificação pelo host (Windows, executada pelo Codex)
+
+Evidência separada das sondas no contêiner, obtida em `127.0.0.1:3000` a partir do Windows:
+
+| Requisição | Resultado |
+| --- | --- |
+| `GET /experiences` | `200`, 2 registros |
+| `GET /departures` | `200`, 4 registros em ordem de início; vagas 12, 8, 12 e 8; `startsAt` em ISO UTC; `priceCents` inteiro |
+| `GET /departures?experienceId=<UUID existente>` | `200`, somente as duas saídas correspondentes |
+| `GET /departures?experienceId=<UUID válido inexistente>` | `200 []` |
+| `GET /departures?experienceId=abc` | `400 VALIDATION_ERROR`, sem ecoar a entrada |
+| `GET /health` | `200`, banco disponível |
+
+### Estado deixado
+
+- `api`, `db` e `db-test` em execução. Volumes `tourflow_pgdata` e `tourflow_dev_node_modules` preservados.
+
+## Fechamento da F1-T2 (2026-11-11)
+
+- PR #6 (`feat/f1-t2-postgresql-foundation` → `develop`), commit `f4c5db9`, mesclado em `2e1a6e3`. CI `43024218169` verde.
+- A evidência HTTP pelo host, antes pendente, foi executada pelo responsável no Windows, na mesma instância da API: `200` → (`db` parado) `503 UNAVAILABLE` → (`db` restaurado) `200`.
+
+## Checkpoint anterior — F1-T2 (2026-11-11)
 
 - Tarefa: F1-T2 — Banco, migrations, seed e saúde.
 - Branch: `feat/f1-t2-postgresql-foundation`, criada a partir de `origin/develop` em `fd74ca4`, levando as três alterações de governança do Codex (`.claude/settings.json`, `CLAUDE.md`, `docs/governanca.md` §15).
@@ -74,7 +133,7 @@
 | `exec -T api id -u` | `1000` (não-root) |
 | Isolamento | Com `db` parado e `db-test` saudável, a API ficou `unhealthy`: ela não alcança o `db-test` |
 
-### Evidência pendente
+### Evidência pendente (resolvida no fechamento acima)
 
 - `curl.exe --include --max-time 10 http://127.0.0.1:3000/health`, o comando exato da lista allow, foi **negado** pela política de permissões. A causa provável é a regra deny `Bash(curl *)`, que casaria antes do allow. Nada foi feito para contornar a negação.
 - O corpo `503 {"error":{"code":"UNAVAILABLE",...}}` está comprovado pelos testes unitários da rota (Supertest). Em runtime, a comprovação é indireta, pelo `HEALTHCHECK`. Falta a chamada HTTP no host, que o responsável pode executar: `curl.exe --include http://127.0.0.1:3000/health` (200), `docker compose stop db`, de novo o `curl` (503) e `docker compose up -d --wait db`.
@@ -159,7 +218,7 @@ F1-T1 aprovada tecnicamente com ressalvas, depois da rodada de correção 1. Evi
 
 ## Próxima ação
 
-Publicação da F1-T2 por PR de `feat/f1-t2-postgresql-foundation` para `develop`. O auto-merge fica condicionado à confirmação da evidência HTTP pendente pelo host e ao CI verde no SHA atual do PR. A promoção para `main` e a F1-T3 dependem de aprovação própria.
+Publicação da F1-T3 por PR de `feat/f1-t3-catalog-queries` para `develop` com auto-merge no HEAD atual do PR (`docs/governanca.md` §16); depois do merge, limpeza somente da branch curta. A promoção para `main` e a F1-T4 dependem de aprovação própria.
 
 ## Governança
 

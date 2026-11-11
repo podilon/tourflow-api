@@ -253,3 +253,22 @@ somente em `db/tourflow` e PR para `develop` com auto-merge.
 - O carregamento das permissões precisa ser confirmado em uma nova
   sessão. Registre comandos bloqueados e evidências pendentes conforme
   o resultado observado.
+
+## 16. Execução e publicação da F1-T3 (2026-11-11)
+
+O responsável aprovou consultas de catálogo, até três iterações do Ralph
+Loop e PR para `develop` após validação. A F1-T3 usa o PostgreSQL existente
+em leitura. Novas dependências, migrations, seed e reservas estão fora
+deste escopo.
+
+- Use os comandos Bash enumerados para a branch `feat/f1-t3-catalog-queries`,
+  os checks do Compose e as seis sondas HTTP com timeout no contêiner
+  `api`. Compare contagens e fingerprint com a linha de base medida na
+  F1-T3. A evidência pelo Windows é separada.
+- O Ralph Loop se limita à implementação, correção e validação local.
+  Confira `jq` e `perl` no Bash da sessão. O estado local do plugin é
+  ignorado pelo Git. A conclusão do loop só pode ser emitida com todos
+  os checks locais comprovados.
+- Depois da verificação pelo host, publique para `develop` e solicite
+  auto-merge no HEAD atual do PR. Encerre sem polling e, após o merge,
+  limpe somente a branch curta. Preserve `develop`, `main` e os volumes.

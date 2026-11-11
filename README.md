@@ -2,7 +2,7 @@
 
 API REST de reservas turísticas com prevenção de sobre-reserva. Escopo, critérios de aceite e arquitetura: [PRD](PRD.md), [ADR-0001](docs/adr/0001-arquitetura.md) e [ROADMAP](ROADMAP.md).
 
-> **Estado atual: F1-T2 (PostgreSQL, migrations, seed e `/health`).** A API sobe com o PostgreSQL 17, aplica o schema e o catálogo fictício por comandos explícitos e informa a saúde do banco em `/health`. Os endpoints de catálogo e reservas chegam nas tarefas seguintes.
+> **Estado atual: F1-T3 (consultas de catálogo).** A API sobe com o PostgreSQL 17, aplica o schema e o catálogo fictício por comandos explícitos, informa a saúde do banco em `/health` e lista experiências e saídas em `GET /experiences` e `GET /departures`. As reservas chegam na F1-T4.
 
 ## Pré-requisitos
 
@@ -44,6 +44,20 @@ curl.exe --include http://127.0.0.1:3000/health
 - O `HEALTHCHECK` da imagem `runtime` consulta essa rota. Por isso, o `docker compose ps` mostra `api` como `unhealthy` enquanto o banco estiver parado.
 
 Rota desconhecida: `404` com `{"error":{"code":"NOT_FOUND","message":"Resource not found"}}`.
+
+## Catálogo (somente leitura)
+
+```powershell
+curl.exe http://127.0.0.1:3000/experiences
+curl.exe http://127.0.0.1:3000/departures
+curl.exe "http://127.0.0.1:3000/departures?experienceId=8f0c2a1e-1b6d-4c1a-9a51-0d2b6f1e7a01"
+```
+
+- `GET /experiences` → `200` com array JSON de `{ id, name, description, durationMinutes }`, ordenado por `name` e, em empate, por `id`.
+- `GET /departures` → `200` com array JSON de `{ id, experienceId, startsAt, capacity, availableSeats, priceCents }`, ordenado por `startsAt` e, em empate, por `id`. `startsAt` é ISO 8601 em UTC (`2026-11-18T09:00:00.000Z`), `priceCents` é inteiro e `availableSeats` = `capacity` − `reserved_seats`.
+- Filtro opcional `experienceId` (UUID, validado com Zod e enviado ao SQL como parâmetro). UUID existente devolve só as saídas daquela experiência. UUID válido sem experiência devolve `200` com `[]`.
+- Filtro inválido, vazio, repetido ou parâmetro desconhecido → `400` `{"error":{"code":"VALIDATION_ERROR","message":"Invalid query parameters"}}`, sem ecoar a entrada.
+- Falha do banco nessas rotas → `500` `INTERNAL_ERROR`, sem detalhe interno.
 
 ## Banco de teste isolado
 
@@ -92,7 +106,7 @@ Nunca use `docker compose down -v`: esse comando apaga os volumes do projeto, in
 
 - `Dockerfile` multi-stage: `base` (Node.js 24.22.2 / Alpine 3.24, fixado por digest), `deps` (`npm ci`), `dev`, `build` (compila `src/` para `dist/`) e `runtime` (apenas `dist/`, `db/` e dependências de produção, usuário não-root `node`, `HEALTHCHECK` em `/health`).
 - PostgreSQL `postgres:17.11-alpine`, fixado por digest, em `db` (volume persistente) e `db-test` (tmpfs, profile `test`).
-- `src/app.ts` monta a aplicação Express sem abrir porta, com dependências injetadas e testável com Supertest. `src/server.ts` abre a porta e cria o pool. `src/config/env.ts` valida a configuração com Zod. `src/http/` contém a rota `/health` e o tratamento de 404 e de erros. `src/infra/db/` reúne o pool, o health check e os executores de migration e seed. O SQL versionado fica em `db/migrations/` e `db/seeds/`.
+- `src/app.ts` monta a aplicação Express sem abrir porta, com dependências injetadas e testável com Supertest. `src/server.ts` abre a porta e cria o pool. `src/config/env.ts` valida a configuração com Zod. `src/http/` contém as rotas (`/health`, catálogo), o controller do catálogo e o tratamento de 404 e de erros. `src/services/catalog-service.ts` deriva `availableSeats` e serializa `startsAt`; `src/repositories/` define o contrato de leitura e a implementação PostgreSQL com SQL parametrizado. `src/infra/db/` reúne o pool, o health check e os executores de migration e seed. O SQL versionado fica em `db/migrations/` e `db/seeds/`.
 - Erros seguem o contrato `{"error":{"code":"<CÓDIGO>","message":"..."}}`, sem stack trace na resposta.
 
 ## Observações para Windows

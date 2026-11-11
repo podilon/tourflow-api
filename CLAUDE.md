@@ -84,6 +84,13 @@ enumerados em `.claude/settings.json` são a exceção de execução para essa
 tarefa. A promoção para `main` e outras tarefas não fazem parte da aprovação.
 Consulte `docs/governanca.md` §15.
 
+**F1-T3 autorizada:** o responsável aprovou as consultas de catálogo, a
+validação local com Ralph Loop (até três iterações) e a publicação da
+branch `feat/f1-t3-catalog-queries` por PR para `develop` após validação.
+Use os comandos enumerados em `.claude/settings.json`. Verificação pelo
+host, commit, push, PR e auto-merge ficam fora do loop.
+Consulte `docs/governanca.md` §16.
+
 - Alteração de PRD/ADR/escopo ou mudança de tecnologia.
 - Instalação de dependência nova não prevista na tarefa.
 - Qualquer migration de alteração estrutural, especialmente destrutiva; executar apenas no banco da TourFlow com alvo verificado.

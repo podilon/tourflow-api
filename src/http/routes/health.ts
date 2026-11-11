@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { DatabaseHealthCheck } from '../../infra/db/health.js';
+import { sendError } from '../send-error.js';
 
 /**
  * GET /health: 200 quando API e banco respondem; 503 UNAVAILABLE quando o
@@ -13,9 +14,7 @@ export function healthRouter(checkDatabase: DatabaseHealthCheck): Router {
       await checkDatabase();
       res.status(200).json({ status: 'ok', database: 'up' });
     } catch {
-      res
-        .status(503)
-        .json({ error: { code: 'UNAVAILABLE', message: 'Database is unavailable' } });
+      sendError(res, 503, 'UNAVAILABLE', 'Database is unavailable');
     }
   });
 

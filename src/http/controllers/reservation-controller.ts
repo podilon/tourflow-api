@@ -6,6 +6,7 @@ import {
   type DomainErrorCode,
 } from '../../domain/reservation.js';
 import type { ReservationService } from '../../services/reservation-service.js';
+import { sendError } from '../send-error.js';
 
 const STATUS_BY_CODE: Readonly<Record<DomainErrorCode, number>> = {
   NOT_FOUND: 404,
@@ -15,13 +16,13 @@ const STATUS_BY_CODE: Readonly<Record<DomainErrorCode, number>> = {
 
 function sendValidationError(res: Response, message: string): void {
   // Mensagem fixa: a entrada recebida não é ecoada.
-  res.status(400).json({ error: { code: 'VALIDATION_ERROR', message } });
+  sendError(res, 400, 'VALIDATION_ERROR', message);
 }
 
 /** Erros de regra viram 404/409; os demais seguem ao errorHandler (500). */
 function sendDomainError(res: Response, error: unknown): void {
   if (!(error instanceof DomainError)) throw error;
-  res.status(STATUS_BY_CODE[error.code]).json({ error: { code: error.code, message: error.message } });
+  sendError(res, STATUS_BY_CODE[error.code], error.code, error.message);
 }
 
 export interface ReservationController {

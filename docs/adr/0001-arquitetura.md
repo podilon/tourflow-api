@@ -1,8 +1,8 @@
 # ADR-0001 — Monólito em camadas com Repository Pattern e PostgreSQL
 
 - **Status:** Proposto (pendente de aprovação para implementação)
-- **Versão:** 1.1
-- **Data:** 2026-11-08
+- **Versão:** 1.2
+- **Data:** 2026-11-11 (v1.1 em 2026-11-08)
 - **Decisores:** responsável pelo projeto, com apoio consultivo de IA
 - **Escopo:** Projeto Final Full Cycle — Nível B / TourFlow API
 
@@ -71,7 +71,9 @@ São compartilhados com outros projetos: risco de interferência, de vazamento d
 - Controllers nunca executam SQL nem tomam decisões de disponibilidade.
 - Serviços não dependem de objetos Express (`Request`/`Response`).
 - Repositórios não retornam detalhes HTTP.
-- A transação não deve atravessar chamadas externas e deve possuir timeout explícito; o valor e sua justificativa são decisão técnica pendente, a definir na F1-T4.
+- A transação não deve atravessar chamadas externas e deve possuir timeout explícito. Definido na F1-T4: `lock_timeout` 1,5 s < `statement_timeout` 1,8 s < `query_timeout` do cliente 2 s, e `idle_in_transaction_session_timeout` 5 s (`src/repositories/pg/pg-reservation-repository.ts`).
+- Instrumentação não altera o resultado de negócio: a métrica de reserva confirmada é notificada depois do `COMMIT`, e uma falha dela é absorvida.
+- Logs registram somente campos explícitos (request ID, método, padrão da rota, status, duração e código de erro), nunca URL bruta, query, corpo, dados pessoais ou o objeto de erro.
 - Uma implementação simples de repositório é suficiente; não criar abstrações genéricas por antecipação.
 - Ambiente de teste usa banco próprio e isolado (`db-test`); proibir DDL contra sistemas existentes.
 - Toda execução de Node.js ocorre em container; nenhum container instala dependências ao iniciar.
@@ -86,6 +88,16 @@ São compartilhados com outros projetos: risco de interferência, de vazamento d
 - Execução verde do CI em `ubuntu-latest`.
 - README com explicação curta do padrão e link para este ADR.
 
+### Evidências produzidas (estado em 2026-11-11, Bloco 3)
+
+- **Camadas e injeção:** `src/server.ts` é o único ponto de composição: cria pool, repositórios PostgreSQL, services, logger e métricas e os injeta em `createApp` (`src/app.ts`). Controllers (`src/http/controllers/`) não importam `pg`; services (`src/services/`) não importam Express, `pg` nem `prom-client`.
+- **Repository Pattern:** contratos em `src/repositories/catalog-repository.ts` e `reservation-repository.ts`; implementações em `src/repositories/pg/`. A transação de reserva (`FOR UPDATE`, relógio lido depois do bloqueio, `INSERT`, `UPDATE`, `COMMIT`/`ROLLBACK`) fica concentrada em `pg-reservation-repository.ts`.
+- **Testes:** unitários com repositórios fake (`tests/unit/`), cobertura v8 ≥ 80% de linhas e branches em `src/domain` e `src/services`; integração no `db-test` (`tests/integration/reservations.test.ts`) com duas provas de concorrência e a prova da métrica (201 incrementa, 409 não).
+- **Observabilidade:** Pino em JSON no stdout com uma linha por requisição (`src/http/middlewares/request-context.ts`, `src/infra/logger.ts`); `GET /metrics` com `Registry` próprio e `tourflow_reservations_confirmed_total` (`src/infra/metrics.ts`, `src/http/routes/metrics.ts`). O SLO está documentado no README; sua medição k6 pertence ao Bloco 4.
+- **Contrato:** `docs/openapi.yaml` (OpenAPI 3.1), validado por `@apidevtools/swagger-parser` em `tests/unit/openapi.test.ts`.
+- **Docker e CI:** `Dockerfile` multi-stage e `docker-compose.yml` com `api`, `dev`, `db` e `db-test`; CI em `ubuntu-latest` via Compose. O serviço `k6` ainda não existe (Bloco 4).
+- **SOLID:** tabela com princípio, componente, evidência e limitação no README (seção "Design: Repository Pattern e SOLID"); OCP registrado como não demonstrado.
+
 ## Relação com a rubrica
 
 Atende o requisito **M1: SOLID e um pattern justificado** e contribui para **M4: ADR com decisão arquitetural**. O ambiente Docker-first e o CI sustentam as evidências de **M2** e **M3**. Não pretende cumprir exigências exclusivas do Projeto A.
@@ -96,3 +108,4 @@ Atende o requisito **M1: SOLID e um pattern justificado** e contribui para **M4:
 | --- | --- | --- | --- |
 | 1.0 | 2026-11-08 | F0-T2 | Versão inicial do ADR. |
 | 1.1 | 2026-11-08 | F0-T5 | Stack atualizada (ESM, Express 5, PostgreSQL 17 Alpine); verificação de saída futura sob bloqueio; decisões de ambiente Docker-first, separação `db`/`db-test`, acesso apenas local, CI em `ubuntu-latest` via Docker Compose, observabilidade e testes mínimos; justificativas reorganizadas por escolha; alternativas E, F e G; custos do Docker no Windows; regra de execução em container; evidências de Docker e CI. |
+| 1.2 | 2026-11-11 | F3-T4 | Timeout da transação registrado (definido na F1-T4); regras de instrumentação pós-`COMMIT` e de campos de log; seção de evidências produzidas com caminhos do código, testes, observabilidade, OpenAPI e referência à tabela SOLID do README. Decisão arquitetural inalterada. |

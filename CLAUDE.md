@@ -107,6 +107,13 @@ Preserve o nome do check obrigatório. Publique `feat/f2-t3-coverage-ci` por
 PR para `develop` após validação local. Ralph Loop tem até três iterações;
 Git de publicação fica fora do loop. Consulte `docs/governanca.md` §18.
 
+**Bloco 3 autorizado (F3-T1 a F3-T4):** implemente logs, métricas, SLO e
+OpenAPI e atualize o ADR e o README. As dependências autorizadas são
+`pino`, `prom-client` e, para desenvolvimento, `@apidevtools/swagger-parser`,
+com versões exatas e instalação em Docker. Use até três iterações do
+Ralph Loop na validação local e publique `feat/f3-observability-openapi`
+para `develop` fora do loop. Consulte `docs/governanca.md` §19.
+
 - Alteração de PRD/ADR/escopo ou mudança de tecnologia.
 - Instalação de dependência nova não prevista na tarefa.
 - Qualquer migration de alteração estrutural, especialmente destrutiva; executar apenas no banco da TourFlow com alvo verificado.

@@ -2,7 +2,7 @@
 
 API REST de reservas turísticas com prevenção de sobre-reserva. Escopo, critérios de aceite e arquitetura: [PRD](PRD.md), [ADR-0001](docs/adr/0001-arquitetura.md) e [ROADMAP](ROADMAP.md).
 
-> **Estado atual: Bloco 2 (F2-T3 e F2-T4), validado localmente.** A API sobe com o PostgreSQL 17, aplica o schema e o catálogo fictício por comandos explícitos, informa a saúde do banco em `/health`, lista experiências e saídas, cria reservas com bloqueio transacional (`POST /reservations`) e as consulta (`GET /reservations/:id`). O CI executa lint, typecheck, unitários com cobertura mínima de 80% (linhas e branches), integração com PostgreSQL isolado (`db-test`) e build. Logs, métrica, OpenAPI e k6 chegam nos blocos seguintes.
+> **Estado atual: Bloco 3 (F3-T1 a F3-T4), validado localmente.** A API sobe com o PostgreSQL 17, aplica o schema e o catálogo fictício por comandos explícitos, informa a saúde do banco em `/health`, lista experiências e saídas, cria reservas com bloqueio transacional (`POST /reservations`) e as consulta (`GET /reservations/:id`). Cada requisição gera uma linha de log JSON (Pino) com request ID, e `GET /metrics` expõe `tourflow_reservations_confirmed_total`. O contrato de reservas está em [docs/openapi.yaml](docs/openapi.yaml) (OpenAPI 3.1). O CI executa lint, typecheck, unitários com cobertura mínima de 80% (linhas e branches), integração com PostgreSQL isolado (`db-test`) e build. A medição do SLO e o smoke k6 pertencem ao Bloco 4.
 
 ## Pré-requisitos
 
@@ -90,6 +90,55 @@ Com `api` e `db` no ar, migrations e seed aplicadas:
 
 Evidência registrada em `docs/estado-execucao.md` (reserva fictícia `9c08f28d-1577-438f-848b-0ccc191e0bb0`).
 
+## Contrato OpenAPI
+
+[docs/openapi.yaml](docs/openapi.yaml) descreve, em OpenAPI 3.1, `POST /reservations` (201, 400, 404, 409 `NO_AVAILABILITY`/`DEPARTURE_CLOSED`, 500) e `GET /reservations/{id}` (200, 400, 404, 500), com schemas, cabeçalhos `Location` e `X-Request-Id` e exemplos fictícios. Somente referências locais (`#/components/...`).
+
+`tests/unit/openapi.test.ts` valida o documento com `@apidevtools/swagger-parser` dentro do container (`npm run test`), confere que só há referências locais, que o exemplo de requisição é aceito pelo schema Zod da API, que os limites do schema espelham o Zod e que a resposta `201` real tem exatamente as propriedades do schema `Reservation`.
+
+## Observabilidade
+
+### Logs (Pino, JSON no stdout)
+
+```bash
+docker compose logs --tail 20 api
+```
+
+Uma linha JSON por requisição, escrita ao fim da resposta (`src/http/middlewares/request-context.ts`):
+
+```json
+{"level":40,"time":"2026-11-11T14:38:38.210Z","requestId":"b584dd65-4abc-4cbb-97d1-5dfe2974f6d1","method":"GET","route":"/departures","statusCode":400,"durationMs":2.196,"errorCode":"VALIDATION_ERROR","msg":"request completed"}
+```
+
+- `requestId` (UUID v4) é **gerado pela API** e devolvido no cabeçalho `X-Request-Id`; um valor enviado pelo cliente é ignorado.
+- `route` é o **padrão** da rota (`/reservations/:id`), nunca a URL bruta; rota desconhecida aparece como `unmatched`. Query string, corpo, cabeçalhos, nome, e-mail, credenciais e o objeto de erro (mensagem, stack, SQL) não são registrados.
+- `errorCode` aparece somente em respostas de erro e repete o código do contrato (`VALIDATION_ERROR`, `NOT_FOUND`, `NO_AVAILABILITY`, `DEPARTURE_CLOSED`, `UNAVAILABLE`, `INTERNAL_ERROR`). Nível: `info` (< 400), `warn` (4xx), `error` (5xx).
+- O `HEALTHCHECK` da imagem também gera linhas de `GET /health`.
+
+### Métrica (Prometheus)
+
+```bash
+docker compose exec -T api node -e "fetch('http://127.0.0.1:3000/metrics').then(async r => console.log(r.status, await r.text()))"
+```
+
+- `GET /metrics` → `200`, `text/plain; version=0.0.4`, a partir de um `Registry` próprio do `prom-client` (`src/infra/metrics.ts`), sem as métricas padrão do processo.
+- `tourflow_reservations_confirmed_total` (counter) incrementa **somente depois do `COMMIT`** de uma reserva (`onConfirmed` em `src/services/reservation-service.ts`). Respostas 400, 404 e 409 não incrementam. Uma falha da instrumentação é absorvida e não transforma a reserva confirmada em erro HTTP.
+- O contador é por processo e volta a zero quando a API reinicia.
+- Prova contra PostgreSQL real: `tests/integration/reservations.test.ts` (`db-test`) confirma que um `201` incrementa e um `409 NO_AVAILABILITY` não incrementa.
+
+### SLO educacional de `GET /departures`
+
+| Item | Definição |
+| --- | --- |
+| SLI | Proporção de requisições `GET /departures` com status `200` **e** duração `< 500 ms`. |
+| Objetivo | **≥ 99%** dessas requisições. |
+| Verificação | Métrica k6 `slo_departures_ok` com threshold `rate>=0.99`, calculada sobre as requisições efetivamente registradas numa execução local. |
+| Amostra mínima | **200 requisições**. Abaixo disso, o resultado é **inconclusivo**, sem extrapolação nem escolha de execuções favoráveis. |
+| Janela | Uma execução k6 local (ambiente Docker Compose desta máquina). |
+| Limitações | Meta educacional, local, sem tráfego real; não é um SLO de produção. O p95 do smoke é medido separadamente, com threshold próprio. |
+
+**Ainda não medido.** A medição com k6 e o registro em `docs/desempenho.md` pertencem ao Bloco 4.
+
 ## Banco de teste isolado e testes de integração
 
 ```bash
@@ -101,7 +150,7 @@ docker compose --profile test stop db-test   # descarta o tmpfs
 - `db-test` é outra instância (banco `tourflow_test`) com os dados em tmpfs, descartados ao parar o container, e sem porta publicada.
 - O serviço `dev` recebe `TEST_DB_*`. Antes de aplicar o schema versionado existente ou gravar fixtures, a suíte confere host `db-test`, porta `5432` e banco `tourflow_test` e, já conectada, `current_database()` e `inet_server_port()`; qualquer divergência aborta (`tests/helpers/test-db.ts`). O migrador de desenvolvimento continua restrito a `db/tourflow`.
 - Cada teste cria experiência e saída fictícias com UUIDs novos; nada é apagado.
-- A suíte cobre caso feliz com persistência, consulta, 400, 404, 409 `NO_AVAILABILITY`, 409 `DEPARTURE_CLOSED` e duas provas de concorrência: duas reservas de 2 vagas disputando uma saída de capacidade 3 (as duas esperas pelo bloqueio são observadas em `pg_stat_activity`; resultado: um `201`, um `409`, uma reserva e `reserved_seats = 2`) e uma saída que se encerra durante a espera (`409 DEPARTURE_CLOSED`, nada gravado, embora a transação tenha começado antes do início da saída).
+- A suíte cobre caso feliz com persistência, consulta, 400, 404, 409 `NO_AVAILABILITY`, 409 `DEPARTURE_CLOSED`, o contador `tourflow_reservations_confirmed_total` (201 incrementa, 409 não) e duas provas de concorrência: duas reservas de 2 vagas disputando uma saída de capacidade 3 (as duas esperas pelo bloqueio são observadas em `pg_stat_activity`; resultado: um `201`, um `409`, uma reserva e `reserved_seats = 2`) e uma saída que se encerra durante a espera (`409 DEPARTURE_CLOSED`, nada gravado, embora a transação tenha começado antes do início da saída).
 
 ## Configuração
 
@@ -123,7 +172,7 @@ docker compose run --rm dev npm run build
 ### Cobertura
 
 - `npm run test:coverage` mede, com o provider v8 (`@vitest/coverage-v8` 5.1.0), todos os arquivos de `src/domain/**/*.ts` e `src/services/**/*.ts`, inclusive os que nenhum teste importa (entram com 0%). O comando **falha** abaixo de 80% de linhas ou de branches (`vitest.config.ts`). O relatório fica em `coverage/` (ignorado pelo Git).
-- Medição local em 11/11/2026: **100% de linhas (29/29) e 100% de branches (8/8)** em `src/domain/reservation.ts`, `src/services/catalog-service.ts` e `src/services/reservation-service.ts`, com 96 testes unitários (exit 0).
+- Medição local em 11/11/2026 (Bloco 3): **100% de linhas (32/32) e 100% de branches (9/9)** em `src/domain/reservation.ts`, `src/services/catalog-service.ts` e `src/services/reservation-service.ts`, com 122 testes unitários em 7 arquivos (exit 0).
 
 ### CI
 
@@ -154,8 +203,28 @@ Nunca use `docker compose down -v`: esse comando apaga os volumes do projeto, in
 
 - `Dockerfile` multi-stage: `base` (Node.js 24.22.2 / Alpine 3.24, fixado por digest), `deps` (`npm ci`), `dev`, `build` (compila `src/` para `dist/`) e `runtime` (apenas `dist/`, `db/` e dependências de produção, usuário não-root `node`, `HEALTHCHECK` em `/health`).
 - PostgreSQL `postgres:17.11-alpine`, fixado por digest, em `db` (volume persistente) e `db-test` (tmpfs, profile `test`).
-- `src/app.ts` monta a aplicação Express sem abrir porta, com dependências injetadas e testável com Supertest. `src/server.ts` abre a porta e cria o pool. `src/config/env.ts` valida a configuração com Zod. `src/http/` contém as rotas (`/health`, catálogo, reservas), os controllers e o tratamento de 404 e de erros. `src/domain/reservation.ts` concentra validação do payload e regras de reserva (saída inexistente, encerrada, sem vagas). `src/services/` deriva `availableSeats`, serializa datas e orquestra a reserva; `src/repositories/` define os contratos e as implementações PostgreSQL com SQL parametrizado (a de reservas executa a transação com `FOR UPDATE`). `src/infra/db/` reúne o pool, o health check, a aplicação de migrations (`migrations.ts`, compartilhada com a integração) e os executores de migration e seed. `tests/unit/` usa fakes; `tests/integration/` usa o `db-test`. O SQL versionado fica em `db/migrations/` e `db/seeds/`.
-- Erros seguem o contrato `{"error":{"code":"<CÓDIGO>","message":"..."}}`, sem stack trace na resposta.
+- `src/app.ts` monta a aplicação Express sem abrir porta, com dependências injetadas e testável com Supertest. `src/server.ts` abre a porta e cria o pool. `src/config/env.ts` valida a configuração com Zod. `src/http/` contém as rotas (`/health`, catálogo, reservas), os controllers e o tratamento de 404 e de erros. `src/domain/reservation.ts` concentra validação do payload e regras de reserva (saída inexistente, encerrada, sem vagas). `src/services/` deriva `availableSeats`, serializa datas e orquestra a reserva; `src/repositories/` define os contratos e as implementações PostgreSQL com SQL parametrizado (a de reservas executa a transação com `FOR UPDATE`). `src/infra/db/` reúne o pool, o health check, a aplicação de migrations (`migrations.ts`, compartilhada com a integração) e os executores de migration e seed. `src/infra/logger.ts` cria o logger Pino e `src/infra/metrics.ts` o `Registry` e o contador; `src/http/middlewares/request-context.ts` gera o request ID e escreve o log de cada requisição; `src/http/routes/metrics.ts` expõe `/metrics`. `tests/unit/` usa fakes; `tests/integration/` usa o `db-test`. O SQL versionado fica em `db/migrations/` e `db/seeds/`.
+- Erros seguem o contrato `{"error":{"code":"<CÓDIGO>","message":"..."}}`, sem stack trace na resposta. Todas as respostas de erro passam por `src/http/send-error.ts`, que também entrega o `errorCode` ao log.
+
+## Design: Repository Pattern e SOLID
+
+O padrão adotado é o **Repository Pattern** ([ADR-0001](docs/adr/0001-arquitetura.md)): os services dependem de contratos (`src/repositories/*-repository.ts`), e as implementações PostgreSQL (`src/repositories/pg/`) são injetadas em `src/server.ts`, sem contêiner de injeção.
+
+| Princípio | Arquivo ou componente | Evidência | Limitação |
+| --- | --- | --- | --- |
+| SRP | `src/http/controllers/*`, `src/services/*`, `src/repositories/pg/*`, `src/domain/reservation.ts`, `src/http/middlewares/request-context.ts` | Controllers validam a entrada e traduzem para HTTP; o domínio decide saída inexistente, encerrada ou sem vagas; services orquestram e serializam; repositórios executam SQL parametrizado e a transação. Log e métrica ficam em `src/infra/` e no middleware, fora das regras. | O controller de reservas mapeia `DomainError` para status HTTP; é tradução de transporte, não regra. |
+| DIP | `src/services/reservation-service.ts`, `src/services/catalog-service.ts`, `src/server.ts` | Os services importam apenas os tipos `ReservationRepository`/`CatalogRepository` e recebem a métrica como callback `onConfirmed`, sem depender de `pg` nem de `prom-client`. A composição concreta ocorre só em `src/server.ts`. | `src/app.ts` cria, por padrão, um logger desligado e um `Registry` novo quando nada é injetado (conveniência para os testes). |
+| ISP | `src/repositories/reservation-repository.ts`, `src/repositories/catalog-repository.ts`, `ReservationPool`/`TransactionClient` em `pg-reservation-repository.ts` | Contratos pequenos e separados por consumidor: leitura de catálogo (2 métodos), reservas (2 métodos); os repositórios PostgreSQL pedem só `query`/`connect`/`release`, não o `Pool` inteiro. | — |
+| LSP | Fakes em `tests/unit/reservation.test.ts`, `tests/unit/catalog.test.ts` e `tests/unit/observability.test.ts` × `tests/integration/reservations.test.ts` | Os mesmos services e controllers rodam com repositórios fake (unitários) e com os repositórios PostgreSQL (integração no `db-test`), sem alteração de código, e produzem os mesmos contratos HTTP. | Há apenas duas implementações de cada contrato (PostgreSQL e fake de teste). |
+| OCP | — | **Não demonstrado** como extensão de produção: não há variação real de comportamento que justifique pontos de extensão, e nenhum foi criado por antecipação. A substituição de repositórios nos testes está registrada em LSP. | Abstrações artificiais foram evitadas de propósito (YAGNI). |
+
+## Limitações
+
+- API de demonstração **sem autenticação**: publicada só em `127.0.0.1`, não deve ser exposta.
+- Sem cancelamento de reserva, pagamento, cache, filas ou deploy.
+- Métrica por processo, sem persistência; logs apenas no stdout do container.
+- SLO e p95 ainda não medidos (Bloco 4).
+- `prom-client` 15.1.3 é marcado como *deprecated* no npm em favor de `@prometheus-io/client`; a troca exige nova aprovação de dependência.
 
 ## Observações para Windows
 

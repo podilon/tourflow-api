@@ -29,12 +29,30 @@ export function toReservation(record: ReservationRecord): Reservation {
   };
 }
 
-export function createReservationService(repository: ReservationRepository): ReservationService {
+export interface ReservationServiceHooks {
+  /** Chamado depois do COMMIT (repository.create resolvido). Ex.: métrica. */
+  onConfirmed?: () => void;
+}
+
+/** Falha de instrumentação não transforma reserva confirmada em erro HTTP. */
+function notifySafely(hook: (() => void) | undefined): void {
+  try {
+    hook?.();
+  } catch {
+    // Ignorado de propósito: a reserva já está gravada.
+  }
+}
+
+export function createReservationService(
+  repository: ReservationRepository,
+  hooks: ReservationServiceHooks = {},
+): ReservationService {
   return {
     async create(request) {
       const record = await repository.create(request, (departure) =>
         assertReservable(departure, request.participants),
       );
+      notifySafely(hooks.onConfirmed);
       return toReservation(record);
     },
     async get(id) {

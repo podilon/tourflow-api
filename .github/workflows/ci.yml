@@ -1,0 +1,91 @@
+# CI da fundação (F1-T1): valida o Compose e executa lint, typecheck, testes
+# e build dentro dos containers. Node.js e npm não rodam no host do runner.
+# PostgreSQL, cobertura e k6 entram nas tarefas correspondentes do ROADMAP.
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - feat/f1-t1-docker-foundation
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  foundation:
+    name: Foundation (Compose lint, typecheck, test, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Projeto Compose exclusivo do job (sobrepõe o name: tourflow do arquivo).
+      CI_PROJECT: tourflow-ci-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout event SHA
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Docker and Compose versions
+        id: versions
+        run: |
+          docker version --format 'Docker {{.Server.Version}} {{.Server.Os}}/{{.Server.Arch}}'
+          docker compose version
+
+      - name: Validate Compose
+        id: config
+        run: docker compose -p "$CI_PROJECT" config --quiet
+
+      - name: Build dev image
+        id: build_dev
+        run: docker compose -p "$CI_PROJECT" --profile dev build dev
+
+      - name: Lint
+        id: lint
+        run: docker compose -p "$CI_PROJECT" --profile dev run --rm --no-deps dev npm run lint
+
+      - name: Typecheck
+        id: typecheck
+        run: docker compose -p "$CI_PROJECT" --profile dev run --rm --no-deps dev npm run typecheck
+
+      - name: Test
+        id: test
+        run: docker compose -p "$CI_PROJECT" --profile dev run --rm --no-deps dev npm run test
+
+      - name: Build
+        id: build
+        run: docker compose -p "$CI_PROJECT" --profile dev run --rm --no-deps dev npm run build
+
+      - name: Summary
+        if: always()
+        env:
+          R_CONFIG: ${{ steps.config.outcome }}
+          R_BUILD_DEV: ${{ steps.build_dev.outcome }}
+          R_LINT: ${{ steps.lint.outcome }}
+          R_TYPECHECK: ${{ steps.typecheck.outcome }}
+          R_TEST: ${{ steps.test.outcome }}
+          R_BUILD: ${{ steps.build.outcome }}
+        run: |
+          {
+            echo "### TourFlow API — CI da fundação"
+            echo ""
+            echo "Commit: \`${GITHUB_SHA}\` | Projeto Compose: \`${CI_PROJECT}\`"
+            echo ""
+            echo "| Verificação | Resultado |"
+            echo "| --- | --- |"
+            echo "| Compose config | ${R_CONFIG} |"
+            echo "| Build dev | ${R_BUILD_DEV} |"
+            echo "| Lint | ${R_LINT} |"
+            echo "| Typecheck | ${R_TYPECHECK} |"
+            echo "| Test | ${R_TEST} |"
+            echo "| Build | ${R_BUILD} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stop job containers (volumes preserved)
+        if: always()
+        run: docker compose -p "$CI_PROJECT" --profile dev down --remove-orphans

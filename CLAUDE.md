@@ -48,6 +48,16 @@ Pode editar somente os caminhos aprovados e executar comandos locais de baixo ri
 
 ### Exigem aprovação explícita, mesmo com tarefa aprovada
 
+**Exceção aprovada para a publicação da F1-T1 (11/11/2026):** na branch
+`feat/f1-t1-docker-foundation`, o responsável delegou ao Claude Code o stage
+dos caminhos aprovados, commit, push da branch, criação e acompanhamento do
+PR, e merge pelo GitHub somente após CI verde para o SHA atual e cumprimento
+das proteções da `main`. A exceção se aplica aos comandos Bash enumerados
+em `.claude/settings.json` e prevalece sobre as restrições gerais de Git
+deste arquivo e do executor para essa entrega. Ver `docs/governanca.md` §11.
+Push direto em `main`, force push, merge administrativo e deploy permanecem
+fora do escopo. O CI desta publicação usa `ubuntu-latest`.
+
 - Alteração de PRD/ADR/escopo ou mudança de tecnologia.
 - Instalação de dependência nova não prevista na tarefa.
 - Qualquer migration de alteração estrutural, especialmente destrutiva; executar apenas no banco da TourFlow com alvo verificado.

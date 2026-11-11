@@ -1,0 +1,13 @@
+# Segredos e configuração local (.env.example permanece versionado)
+.env
+.env.*
+!.env.example
+
+# Preferências pessoais do Claude Code
+.claude/settings.local.json
+
+# Dependências e artefatos gerados (Node.js roda só em containers)
+node_modules/
+dist/
+coverage/
+npm-debug.log*

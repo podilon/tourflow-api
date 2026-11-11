@@ -2,7 +2,7 @@
 
 API REST de reservas turísticas com prevenção de sobre-reserva. Escopo, critérios de aceite e arquitetura: [PRD](PRD.md), [ADR-0001](docs/adr/0001-arquitetura.md) e [ROADMAP](ROADMAP.md).
 
-> **Estado atual: Bloco 1 (F1-T4, F1-T5, F2-T1 e F2-T2), validado localmente.** A API sobe com o PostgreSQL 17, aplica o schema e o catálogo fictício por comandos explícitos, informa a saúde do banco em `/health`, lista experiências e saídas, cria reservas com bloqueio transacional (`POST /reservations`) e as consulta (`GET /reservations/:id`). Testes unitários e de integração com PostgreSQL isolado (`db-test`) rodam via Compose. Logs, métrica, cobertura no CI, OpenAPI e k6 chegam nos blocos seguintes.
+> **Estado atual: Bloco 2 (F2-T3 e F2-T4), validado localmente.** A API sobe com o PostgreSQL 17, aplica o schema e o catálogo fictício por comandos explícitos, informa a saúde do banco em `/health`, lista experiências e saídas, cria reservas com bloqueio transacional (`POST /reservations`) e as consulta (`GET /reservations/:id`). O CI executa lint, typecheck, unitários com cobertura mínima de 80% (linhas e branches), integração com PostgreSQL isolado (`db-test`) e build. Logs, métrica, OpenAPI e k6 chegam nos blocos seguintes.
 
 ## Pré-requisitos
 
@@ -115,11 +115,21 @@ O serviço `dev` (profile `dev`) contém as ferramentas de desenvolvimento. O c�
 docker compose --profile dev build dev
 docker compose run --rm dev npm run lint
 docker compose run --rm dev npm run typecheck
-docker compose run --rm dev npm run test:unit   # sem banco; "npm run test" é equivalente
+docker compose run --rm dev npm run test:unit       # sem banco; "npm run test" é equivalente
+docker compose run --rm dev npm run test:coverage   # unitários + cobertura v8 com limiar
 docker compose run --rm dev npm run build
 ```
 
-Os testes de integração exigem o `db-test` (seção acima). O CI hospedado executa, neste bloco, lint, typecheck, testes unitários e build.
+### Cobertura
+
+- `npm run test:coverage` mede, com o provider v8 (`@vitest/coverage-v8` 5.1.0), todos os arquivos de `src/domain/**/*.ts` e `src/services/**/*.ts`, inclusive os que nenhum teste importa (entram com 0%). O comando **falha** abaixo de 80% de linhas ou de branches (`vitest.config.ts`). O relatório fica em `coverage/` (ignorado pelo Git).
+- Medição local em 11/11/2026: **100% de linhas (29/29) e 100% de branches (8/8)** em `src/domain/reservation.ts`, `src/services/catalog-service.ts` e `src/services/reservation-service.ts`, com 96 testes unitários (exit 0).
+
+### CI
+
+O job `Foundation (Compose lint, typecheck, test, build)`, em `ubuntu-latest`, usa um projeto Compose próprio (`CI_PROJECT`) em todas as etapas: valida o Compose, constrói a imagem `dev`, roda lint, typecheck, `test:coverage`, sobe o `db-test` desse projeto (`--profile test up -d --wait`), roda `test:integration` e o build. O resumo do job lista o resultado de cada etapa e os percentuais de cobertura. Ao final, sempre (`if: always()`), os containers do job são encerrados com `down --remove-orphans`, sem `-v`. O banco de desenvolvimento (`db`) não participa.
+
+Os testes de integração exigem o `db-test` (seção acima).
 
 ## Sincronizar dependências do ambiente `dev`
 

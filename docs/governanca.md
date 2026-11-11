@@ -294,3 +294,24 @@ integração no CI ficam para o próximo bloco.
   local. Faça a publicação para `develop` fora do loop, após aceite,
   com auto-merge no SHA atual e sem polling. Preserve `main` e
   `develop`. Não inicie o Bloco 2 com esta autorização.
+
+## 18. Cobertura e integração no CI (2026-11-11)
+
+O responsável aprovou o Bloco 2, incluindo somente
+`@vitest/coverage-v8@5.1.0` como nova dependência de desenvolvimento,
+instalada em Docker. O limiar obrigatório é 80% de linhas e 80% de
+branches em `src/domain/**/*.ts` e `src/services/**/*.ts`.
+
+- O CI hospedado preserva o nome
+  `Foundation (Compose lint, typecheck, test, build)`. No mesmo job,
+  execute a cobertura e a suíte real de integração no `db-test`
+  efêmero do projeto Compose do job. Preserve as guardas do alvo de
+  teste, o resumo das verificações e a limpeza com `if: always()`.
+- Feche o PR #8 antes de criar `feat/f2-t3-coverage-ci`. A atualização
+  local de `develop` é exclusivamente por fast-forward. Exclua a
+  branch curta anterior apenas após verificar a exclusão remota e a
+  ancestralidade do seu último commit.
+- O Ralph Loop se limita à validação local, com até três iterações.
+  Publique a branch para `develop` fora do loop, com auto-merge no
+  SHA atual do PR e sem polling. A promoção para `main` e o Bloco 3
+  ficam fora deste escopo.

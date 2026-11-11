@@ -64,6 +64,12 @@ branches mescladas conforme as verificações em `docs/governanca.md` §12.
 A publicação dessa política ocorre em `chore/automate-post-merge` e segue
 as proteções do GitHub e o CI hospedado.
 
+**Cerimônia do curso (Moodle):** `main` e `develop` são permanentes.
+Após o bootstrap da `develop`, branches de tarefa partem dela e voltam
+para ela por PR. Entregas são promovidas de `develop` para `main` por PR.
+O Claude Code pode executar os comandos enumerados para o bootstrap e
+para o PR `chore/moodle-develop-ci`, conforme `docs/governanca.md` §13.
+
 - Alteração de PRD/ADR/escopo ou mudança de tecnologia.
 - Instalação de dependência nova não prevista na tarefa.
 - Qualquer migration de alteração estrutural, especialmente destrutiva; executar apenas no banco da TourFlow com alvo verificado.
